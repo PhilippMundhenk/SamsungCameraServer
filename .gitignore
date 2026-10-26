@@ -4,4 +4,4 @@
 .kotlin/
 build/
 local.properties
-res/
+/res/

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NX Backup</string>
+    <string name="title">Samsung camera Auto Backup target</string>
+
+    <string name="section_mode">Mode</string>
+    <string name="mode_direct">Save to folder on this phone</string>
+    <string name="mode_backend">Forward to backend server</string>
+    <string name="folder_label">Folder</string>
+    <string name="folder_default">App storage (Android/data/org.mundhenk.nxbackup/files/NXBackup)</string>
+    <string name="choose_folder">Choose folder…</string>
+    <string name="backend_url_hint">Backend URL, e.g. http://nas.lan:52235</string>
+    <string name="backend_token_hint">Backend token (api.token on the server, optional)</string>
+
+    <string name="section_identity">Server identity (must match the pairing file)</string>
+    <string name="name_hint">Name shown on camera</string>
+    <string name="udn_hint">UDN</string>
+    <string name="regenerate">New UDN</string>
+    <string name="export_pairing">Export pairing file (zip for SD card)</string>
+    <string name="pairing_help">Unzip into the SD card root → creates dlna_web_root/SAMSUNGAutoBackupDESC.ini. Repeat after formatting the card.</string>
+
+    <string name="start">Start server</string>
+    <string name="stop">Stop server</string>
+    <string name="status_stopped">Stopped</string>
+    <string name="status_running">Running — camera: Wi-Fi → Auto Backup (or Smart Link)</string>
+    <string name="log_label">Log</string>
+    <string name="clear_log">Clear</string>
+
+    <string name="notif_channel">Backup server</string>
+    <string name="notif_title">NX Backup server running</string>
+    <string name="notif_text">Waiting for the camera…</string>
+    <string name="pairing_saved">Pairing file saved</string>
+    <string name="pairing_failed">Could not save pairing file</string>
+</resources>
