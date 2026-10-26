@@ -1,0 +1,529 @@
+NX1000 WiFi backup — chat transcript (Claude, 2026-10-26, raw text)
+=====================================================================
+Speaker labels: USER / CLAUDE. Tool activity (web searches, firmware
+analysis, file writes) is summarised in [brackets]. Attachments noted inline.
+
+---------------------------------------------------------------------
+USER (13:42)
+I have a Samsung nx1000. It has a wifi mode to transfer data. However, the
+apps and stuff are no longer supported. Propose ways around that to use the
+wifi for transferring data off the device. Can we reverse engineer and
+reimplement the app?
+
+CLAUDE
+[web searches: Samsung NX1000 wifi reverse engineering; samsung-nx-emailservice]
+Good news: most of the reverse engineering is already done. The camera's WiFi
+features are plain HTTP/SOAP/UPnP, unencrypted, and the community has
+documented them.
+
+1. PC Auto Backup (best for originals) — camera on your home WiFi pushes
+   full-size files to a "PC". There's a complete reimplementation of
+   PC-Autobackup in Python for Linux and Mac, linked from the samsung-nx-hacks
+   wiki (https://github.com/ge0rg/samsung-nx-hacks/wiki/PC-Auto-Backup). Run
+   it on your Proxmox/NAS; the feature matrix confirms NX1000/NX1100 support
+   PC Auto-Backup.
+2. Email/social upload -> self-hosted server — the web services were
+   discontinued around January 2021, but there's a Flask-based
+   reimplementation you can self-host after redirecting DNS:
+   https://github.com/ge0rg/samsung-nx-emailservice. It can send emails, post
+   to Mastodon, or store to a directory on the server; you point
+   gld.samsungosp.com, www.samsungimaging.com, www.ospserver.net and
+   snsgw.samsungmobile.com at it — trivially done with Unbound host overrides
+   on your OPNsense. Caveat: email mode downsizes images.
+3. MobileLink / Remote Viewfinder (Wi-Fi Direct to phone) — the old Samsung
+   Smart Camera App APK still installs on Android (APKMirror) and works offline
+   since the camera is the AP. Remote Viewfinder (SOAP, HTTP stream) is
+   documented on the wiki; MobileLink is UPnP-based and less documented — this
+   is the one spot where a reimplementation would be new work.
+
+Reverse engineering yourself: easy. Make a Linux box the AP (hostapd) or
+mirror the camera's port on OPNsense, run Wireshark/mitmproxy — it's all
+cleartext XML. Note the NX1000 is a DRIMeIII camera, not Linux-based like the
+NX300, so on-camera hacks are out; everything has to be emulated on the peer
+side.
+
+Zero-effort fallback: an ezShare WiFi SD card bypasses the camera's WiFi
+entirely.
+
+Sources: samsung-nx-hacks (https://github.com/ge0rg/samsung-nx-hacks/), wiki
+(https://github.com/ge0rg/samsung-nx-hacks/wiki), samsung-nx-emailservice
+(https://github.com/ge0rg/samsung-nx-emailservice)
+
+---------------------------------------------------------------------
+USER (13:46)
+Is auto backup supported? Camera has an auto backup menu but tells me to
+connect via USB. How does this work?
+
+CLAUDE
+[web searches: PC Auto Backup USB registration; found n-i-x/pc-autobackup]
+Yes, NX1000 is explicitly on the tested list. The USB step is just a
+registration trick, not a transport.
+
+How the original worked: the Windows PC Auto Backup tool used the USB
+connection only to write a small config onto the camera's SD card containing
+the PC's hostname and MAC address (so the camera "knows" which PC it's paired
+with and can send WoL). On WiFi, the camera then does UPnP/SSDP discovery,
+matches the registered PC, and uploads originals over HTTP/SOAP. The USB-mount
+step is therefore replaceable by writing that file yourself.
+
+The reimplementation: https://github.com/n-i-x/pc-autobackup (Linux/macOS).
+Workflow: mount the SD card in a reader, run
+pc_autobackup.py --create_camera_config=/path/to/sdcard (or
+--import_camera_config if it was ever paired with the Windows tool), put the
+card back, then run pc_autobackup.py as the server on your LAN. The camera's
+Auto Backup menu then finds it instead of asking for USB.
+
+Caveats:
+- The repo was archived in May 2023 and targets Python 2.7 — expect to port
+  it to Python 3 (small codebase; a quick Claude Code job) or run it in a py2
+  container.
+- Camera and server need to be on the same L2 segment (SSDP multicast) —
+  watch your OPNsense VLANs/AP isolation.
+- It's known to be firewall-sensitive (UDP 1900 + the TCP port the server
+  announces).
+
+---------------------------------------------------------------------
+USER (13:47)
+[two photos of the NX1000 Wi-Fi menu: AutoShare, MobileLink, Remote
+Viewfinder, SNS & Cloud, Email, Auto Backup, TV Link]
+
+CLAUDE
+That confirms the full NX1000 feature set — seven entries, and here's how
+each maps to a working path today:
+- Auto Backup — the one to use for bulk originals -> pc-autobackup server
+  after writing the config to the SD card (replaces the "connect via USB"
+  step).
+- Email / SNS & Cloud — dead Samsung endpoints -> revive with
+  samsung-nx-emailservice + DNS override on OPNsense; Email can "store" to a
+  server folder, but images are downscaled.
+- MobileLink / AutoShare / Remote Viewfinder — camera acts as its own AP,
+  phone connects -> sideloaded Samsung Smart Camera App still works;
+  otherwise UPnP/SOAP to reimplement.
+- TV Link — plain DLNA media server. Worth a quick try: put the camera on
+  your WiFi, open VLC/Kodi or a DLNA browser, and you may be able to pull
+  files directly with zero reverse engineering. Likely still
+  downscaled/JPEG-only, but trivial to test.
+Suggested order: try TV Link now (5 minutes), then set up Auto Backup for the
+real workflow.
+
+---------------------------------------------------------------------
+USER (13:48)
+Is only email downscaled?or all cloud?
+
+CLAUDE
+As far as I know, all of the Samsung-web-service paths downscale, not just
+Email. The NX-series manuals carry the same "photos will be resized to 2M"
+note for Email, SNS (Facebook/Picasa/YouTube) and online storage (SkyDrive),
+plus a per-upload size/file-count cap — the camera resizes before it ever
+hits the API, so a reimplemented server can't recover full resolution.
+Only the LAN/Wi-Fi-Direct paths move originals:
+- Auto Backup — full originals (JPEG and RAW).
+- MobileLink — originals when you pull from the phone side.
+- AutoShare — reduced copies (it's designed for instant phone sharing).
+- TV Link — DLNA; serves viewable JPEG, no RAW.
+So for an actual offload workflow, Auto Backup is the only wireless path
+worth building on. If you want to confirm the exact figure for your firmware,
+check the Wi-Fi chapter of the NX1000 manual — it's stated in the notes for
+each upload mode.
+
+---------------------------------------------------------------------
+USER (13:54)
+Pc-autobackup is archived. Is this an issue?
+
+CLAUDE
+Not really. The protocol is frozen — the camera firmware will never change —
+so the server doesn't need maintenance either. "Archived" here means
+"finished," not "broken."
+The real issues are practical:
+- Python 2.7 — it won't run on a modern host without a py2 container
+  (python:2.7 Docker images still exist) or a port to Python 3. The code is
+  small (SSDP responder + a few SOAP handlers + file writes); a port is an
+  afternoon, or a Claude Code task.
+- No maintainer — if the NX1000 trips on some edge case, you fix it
+  yourself. Since it's on the tested list, that's unlikely.
+- Forks — worth checking the repo's fork network first; someone may already
+  have a py3 version.
+Given it's a one-shot adapter speaking a 2012 protocol to a camera that will
+never update, I'd treat the archive status as a non-issue and just
+containerize or port it.
+
+---------------------------------------------------------------------
+USER (13:58)
+So essentially the camera gets a wifi config written to SD card? Then
+connects to a server, correct?
+
+CLAUDE
+Almost, with one correction: the file on the SD card is not a WiFi config,
+it's a pairing record — the backup PC's name and MAC address (that's what the
+Windows tool wrote over USB). The WiFi network itself is configured in the
+camera's own menu as usual.
+Flow:
+1. SD card: write the pairing record (--create_camera_config).
+2. Camera: select Auto Backup -> it joins your home WiFi (saved network or
+   you pick one).
+3. Camera sends a Wake-on-LAN magic packet to the paired MAC, then does an
+   SSDP/UPnP discovery on the LAN.
+4. Your server answers the discovery, advertising the matching name/MAC.
+5. Camera uploads new files over HTTP/SOAP; the server tracks what's already
+   backed up.
+So the server must run on the host whose MAC is in the pairing record (or at
+least advertise that MAC in its UPnP description — pc-autobackup lets you set
+it), and it must sit on the same L2 segment as the camera for the multicast
+discovery to work.
+
+---------------------------------------------------------------------
+USER (14:02)
+Ok, I don't like that. This is very much geared towards a laptop/desktop use
+case. I'd like to rebuild that as a server implementation, with easy linkage,
+can we rebuild the SW, with web USB or similar to connect to the camera? And
+then have the server auto accept any transfer, as soon as camera is online or
+triggers the according menu
+
+CLAUDE
+Yes, that's a sensible rebuild, and the pieces are small. Two constraints
+shape the design:
+
+What can't change (camera side, no firmware access):
+- The camera is the client. Nothing starts until you select Auto Backup — but
+  you can map the Smart Link button to Auto Backup, so it's one press after
+  power-on. The server can't pull.
+- The camera only talks to a peer whose identity matches the pairing record.
+  So a one-time pairing write is unavoidable — but it's a tiny static file,
+  and your server can own a fixed virtual identity forever, so every camera
+  you pair points at "the server," not a laptop.
+- Discovery is SSDP multicast -> server needs a foot on the camera's L2
+  segment (Docker macvlan or run it on that VLAN).
+
+Server design (Python 3, containerized):
+- SSDP responder + UPnP device description with configurable name/MAC
+  (virtual, not the host's).
+- SOAP/HTTP handlers from pc-autobackup, auto-accept everything, write to
+  NAS path by camera serial + date, no per-session confirmation.
+- Web UI: status, last upload, download the pairing bundle for a new camera.
+- Hook: fire a webhook/HA event on completed upload — feeds straight into
+  your photosort pipeline.
+
+Linkage options, cheapest first:
+1. Pairing bundle -> drop on the SD card via card reader (30 seconds, once
+   per card — note an in-camera format wipes it, so keep it downloadable).
+2. WebUSB pairing page: camera plugs into phone (OTG) or laptop, Chrome page
+   talks PTP and writes the file via SendObject. Nice on Android. Caveats:
+   Chrome-only, Windows needs a WinUSB driver swap, and I'd need to verify
+   the NX1000 exposes PTP rather than mass storage.
+3. Skip USB entirely — the pairing data is mostly the server identity, so
+   it's a candidate for a fixed, generic file anyone can download.
+
+I'd build 1 first, then 2 as polish. Want me to start by extracting the
+protocol spec from pc-autobackup's source into a short design doc, then
+scaffold the server?
+
+---------------------------------------------------------------------
+USER (14:03)
+I like this. So we could just have the server generate the file and make the
+file downloadable, then user manually adds to SD card, correct?
+Everything else is automatic after pressing the smart link button?
+
+CLAUDE
+Correct on both counts, with two small caveats.
+Pairing: server generates the file once (its fixed virtual identity), user
+copies it to the SD card root with a card reader. If the file format turns
+out to carry no per-camera data, it's literally one static download for all
+cameras. Re-copy after an in-camera format.
+After that: power on -> press Smart Link (mapped to Auto Backup) -> camera
+joins its saved WiFi -> discovers the server -> uploads everything not yet
+backed up -> done. No interaction on the server side; it just accepts.
+Caveats:
+- The camera asks for the WiFi network once if none is saved; after that
+  it's automatic.
+- On the first Auto Backup run with the original tool there was a "connect
+  to this PC?" confirmation on the camera. Whether that prompt appears
+  depends on what the camera stores after first success — if it does, it's
+  one more OK press, once.
+I'll confirm both details from pc-autobackup's source when I extract the
+spec. Shall I start?
+
+---------------------------------------------------------------------
+USER (14:03)
+Analyze the file format: What's exactly needs to be written to the cameras
+card?
+
+CLAUDE
+[cloned n-i-x/pc-autobackup, read common.py, pc_autobackup.py, mediaserver.py]
+Analyzed the source. The pairing file is tiny and fully static — exactly what
+we hoped.
+
+Path on the SD card (NX1000): dlna_web_root/SAMSUNGAutoBackupDESC.ini (the
+Windows tool created that folder; our server bundle just includes it). The
+model is read from SYSTEM/DEVICE.XML on the card, but only to pick the
+path/case for the filename.
+
+Contents (CRLF line endings, 5 lines):
+    MacAddr=AA:BB:CC:DD:EE:FF
+    UDN=uuid:4a682b0b-0361-dbae-6155-xxxxxxxxxxxx
+    friendlyName=[PC]AutoBackup
+    WOLSupport=1
+    ServerFlag=1
+
+What each field does:
+- UDN — the only thing the camera actually matches. It must equal the UUID in
+  the server's SSDP USN header and UPnP device description. The first four
+  groups are a fixed Samsung prefix; only the last 12 hex digits vary.
+- friendlyName — shown on the camera, also in the device description.
+  Cosmetic match.
+- MacAddr — used only for the Wake-on-LAN packet. The server never advertises
+  it; with an always-on server it's irrelevant (can be any value).
+- WOLSupport / ServerFlag — constant 1.
+
+Implication for the design: the server picks one UUID + name at install,
+bakes them into this file, and that file is identical for every camera,
+forever. No per-camera data, no USB, no WebUSB needed. The web UI just serves
+a zip containing dlna_web_root/SAMSUNGAutoBackupDESC.ini; the user unzips to
+the card root. Even the --import path becomes trivial: a card paired with the
+old Windows tool just needs its UDN copied into the server config.
+
+The protocol side is equally small: SSDP M-SEARCH responder for
+MediaServer:1, one device-description XML, and three SOAP actions —
+X_BACKUP_START, CreateObject (returns an import URI), the HTTP POST upload to
+that URI, and X_BACKUP_DONE.
+
+Ready to scaffold the Python 3 server on that basis?
+
+---------------------------------------------------------------------
+USER (14:08)
+Are you sure the UDN does not need to match the camera serial or sthg? Can it
+really be freely chosen?
+What are the other flags? Are there more undocumented flags we can use for
+additional functionality?
+
+CLAUDE
+UDN: Reasonably sure, not certain. Evidence from the source: the Python tool
+generates the UDN itself at install — fixed prefix 4a682b0b-0361-dbae-6155-
+plus a random 12-hex suffix — and never reads anything from the camera except
+the model name (to pick the filename). The same UDN is reused for every
+camera. Since it's on the NX1000 tested list, that generation scheme is known
+to work. The camera is the client here; the UDN is just "which media server
+am I allowed to push to," so there's no reason for it to involve the camera's
+serial.
+The one caveat is the fixed prefix: the author hard-coded it rather than
+using a full uuid4(), which suggests the original Windows tool used it and
+possibly the camera checks it. Cheap insurance: keep that prefix.
+
+Other flags: only the five lines exist as far as anyone knows. WOLSupport=1
+and ServerFlag=1 are just mirrored from what the Windows tool wrote; nobody
+has documented their effect. Everything else — what files to send, RAW vs
+JPEG, dedup — is camera-side settings, not in this file.
+
+Finding undocumented flags: the only way is the firmware. The NX1000 firmware
+is a DRIMeIII binary (not Linux, so no filesystem to browse), but it's
+available from the NXFiles archive and plain `strings` on it will show the
+key names the ini parser looks for — if there are more than five, they'll sit
+next to ServerFlag and WOLSupport. That's a 10-minute check and worth doing
+once before we lock the format. Want me to pull the firmware and grep it?
+
+---------------------------------------------------------------------
+USER (14:10)
+Two things:
+- yes, do this analysis
+- what exactly is the file name differentiation? I don't get it...
+
+CLAUDE
+Quick answer on the filename first, then the firmware.
+Filename differentiation: it's just casing. The original Windows tool wrote
+the file with slightly different spelling per camera family
+(dlna_web_root/SAMSUNGAutoBackupDESC.ini on NX models,
+DLNA_WEB_ROOT/SAMSUNGAUTOBACKUPDESC.INI on WB150, lower-case on the default).
+The Python tool reads the model from SYSTEM/DEVICE.XML only to reproduce the
+same spelling. The SD card is FAT, so it almost certainly doesn't matter — the
+author was just mirroring what he saw on real cards. For the NX1000 we use
+dlna_web_root/SAMSUNGAutoBackupDESC.ini and move on.
+[tried to download the firmware: nxfiles.nx.tc and Samsung CDN blocked from
+the workspace]
+I can't pull the firmware from here — this workspace's shell only reaches
+package registries and GitHub, and nxfiles.nx.tc and Samsung's download CDN
+are both blocked. Two ways forward:
+1. Attach the firmware — grab the NX1000 body firmware (.bin, ~20 MB) from
+   NXFiles (https://nxfiles.nx.tc/) or Samsung's support page and drop it in
+   this chat; I'll run the analysis right away.
+2. Run it yourself — it's one line:
+   strings -n 6 nx1000.bin | grep -i -E 'ServerFlag|WOLSupport|MacAddr|friendlyName|UDN|AutoBackupDESC|dlna_web_root' -B3 -A8
+Key names are normally stored adjacent in the binary, so anything extra will
+show up in the surrounding lines. If the firmware is compressed, binwalk -e
+first, then strings over the extracted blobs.
+Either way, the pairing-file format is locked unless that grep turns up a
+sixth key.
+
+---------------------------------------------------------------------
+USER (15:30)
+Can the camera store multiple wifi networks? This way, we could build a
+server tool, as well as an android app to backup stuff on the go via hotspot
+
+CLAUDE
+Yes, in my experience these Samsung WiFi cameras keep a list of saved
+networks with passwords and offer "connect to a remembered network" first —
+the manual describes selecting from recently used APs. You'll be able to
+confirm on your unit by connecting to two different networks and checking if
+both reappear. Worth a 2-minute test.
+
+Your idea works even better than you'd expect because of what we found in
+the file format: the pairing record contains only the server identity (UDN +
+name), not a network. So both the home server and the Android app advertise
+the same UDN. The camera doesn't care which physical box answers — whichever
+one is on the network it's currently connected to wins. One pairing file, two
+backends, zero reconfiguration.
+
+Sketch:
+- Home: the Python server on your LAN.
+- On the go: phone hotspot + an Android app running the same SSDP responder
+  + SOAP endpoints (Kotlin, or the Python server itself inside Termux as a
+  first prototype). Hotspot interfaces do receive multicast on Android, so
+  DLNA-style discovery works there.
+- Sync-back: the app pushes received files to the home server when it next
+  sees it (or just Syncthing a folder). Needed because the camera tracks what's
+  already backed up, so a photo sent to the phone won't be sent to the home
+  server again.
+
+Caveat: the camera chooses which network to join; it won't prefer the
+hotspot automatically. Hotspot on -> Smart Link -> pick the phone from the
+remembered list is the realistic flow.
+
+---------------------------------------------------------------------
+USER (15:34)
+I'd like to sync this via Synology drive then. I already have photo backup
+enabled on that. How does the camera determine which files have been
+uplaoded?
+
+CLAUDE
+[read pc-autobackup mediaserver.py: no dedup logic in CreateObject]
+Short answer: the camera decides, not the server. The server code has no
+dedup at all — CreateObject blindly accepts whatever the camera offers and
+writes it. So the camera keeps its own "already backed up" state.
+How exactly isn't documented in the reimplementation. Two likely mechanisms,
+both on the SD card: the DOS archive bit per file, or Samsung's own hidden
+file-management database on the card.
+Easy to settle: run one backup, then check via card reader whether the
+archive attribute on the transferred files changed. If it's the archive bit,
+anything that rewrites the files would make the camera resend them — a reason
+for the server to dedup defensively by name + size + date anyway, which is
+trivial and I'd build in regardless.
+Two practical consequences:
+- Per-card state. New card or in-camera format -> everything on it is "new"
+  again. Harmless with server-side dedup.
+- Phone-vs-home split works as planned: whatever the phone received is marked
+  done and won't go to the home server, so the sync-back path matters.
+For Synology Drive that's a clean fit: both the home server and the Android
+app write into a folder that Drive syncs (Drive client on the phone for the
+hotspot case). The home server's hook can also drop files straight into the
+same share your existing photo backup already watches, so photosort picks
+them up without a second pipeline.
+
+---------------------------------------------------------------------
+USER (15:36)
+[attached NX1000_NX1100_FW_v1_15.zip]
+Here is the requested fw.
+Can we also integrate the raw converter? Maybe allow for time offsets, other
+post processing on server?
+
+CLAUDE
+[unzipped: nx1000.bin (30.5 MB), nx1000.Rom (77.5 MB); ran strings/grep on
+nx1000.bin — all AutoBackup, UPnP config and SQLite strings found]
+Firmware confirms the format and adds some useful detail. Here's what
+AutoBackup::GetPCInfo actually parses:
+
+Pairing file — final spec. Keys: MacAddr=, UDN=, friendlyName=, WOLSupport,
+ServerFlag=1. Nothing else; the loop has no other key strings. MacAddr and
+UDN are required (missing -> "no MacAddr!!" / "no UDN!" error), friendlyName
+too. The MAC only feeds the Wake-on-LAN sender. The UDN is matched against
+the SSDP device list ("Appear Target DMS... UDN: %s") — no serial involved,
+free to choose. Format locked.
+
+Dedup — answered properly now. The camera keeps a SQLite DB on the card at
+config/DMC/MSCP/mscp.db, table ObjectTable with an IsBackup column; backup
+candidates are `select FullPath ... where IsBackup != 1`. So: per-card,
+survives power cycles, resets on format. Since it's plain SQLite on FAT, the
+server bundle could even ship a tool to reset or seed it.
+
+Bonus hooks found:
+- CreateObject "File Exist" error path: if the server answers with the right
+  UPnP error, the camera skips the file and moves on — server-side dedup that
+  the camera respects.
+- Resumable uploads: the camera handles ImportURI + UploadedSize/start
+  offset, so interrupted hotspot transfers can resume.
+- X_BACKUP_DONE carries a SysOff flag — the camera's "shut down PC after
+  backup" option. We can map it to anything (trigger photosort, send a
+  notification).
+- SSDP TTL is 2, so a single routed hop would work if your OPNsense relays
+  multicast; same-L2 is still simplest.
+
+RAW converter / post-processing: yes, as a server-side pipeline stage after
+X_BACKUP_DONE. Samsung's RAW Converter was a rebadged SilkyPix, Windows-only
+and dead; on the server use darktable-cli
+(https://docs.darktable.org/usermanual/stable/en/special-topics/program-invocation/darktable-cli/)
+or RawTherapee CLI (https://rawpedia.rawtherapee.com/Command-Line_Options) —
+both read Samsung .SRW. Time offset is an exiftool (https://exiftool.org/)
+one-liner (-AllDates+=1:00), configurable per camera in the web UI, which also
+covers the camera's lack of DST handling. Other obvious stages: JPEG+RAW
+pairing, rename to date-based names, HA webhook, drop into the Synology Drive
+folder.
+
+Ready to scaffold — Python 3 server with these stages as a pluggable
+pipeline?
+
+---------------------------------------------------------------------
+USER (15:52)
+Build the APK first, backend later. Additional rewrites we will do later on
+backend. APK should have backend connection mode and direct savings mode. It
+should accept all the files into a configurable folder. Should also allow to
+generate the file to put to SD card. Android does backup only, no additional
+features.
+
+USER (15:52, mid-turn)
+Perform full end to end tests, including UI, deliver APK and complete
+workspace when done.
+
+CLAUDE
+[checked workspace: Android SDK / Maven / Gradle distribution hosts are
+blocked; Gradle 8.14.3's embedded Kotlin compiler works standalone. Built the
+project: core (pure Kotlin JVM) + app (Android) + Espresso UI test + GitHub
+Actions. Ran tools/e2e-jvm.sh here: loopback server <-> simulated camera,
+5 MB over JPEG/SRW/MP4 byte-exact, dedup on re-run, SysOff propagated, SSDP
+multicast discovery — all passed. Delivered nxbackup-workspace.zip.]
+
+Workspace delivered as nxbackup-workspace.zip. One thing I have to be plain
+about: there is no APK in it. This session cannot reach Google's SDK/Maven
+servers, so the Android module couldn't be compiled or run here. The project
+ships with a GitHub Actions workflow that builds the debug APK and runs the
+UI tests on an emulator — push it to a repo and the nxbackup-debug-apk
+artifact appears on the first run.
+
+What was actually tested here (JVM core, same code the app uses):
+- Full camera session against a simulated NX1000: device description ->
+  X_BACKUP_START -> CreateObject -> raw upload -> X_BACKUP_DONE, with
+  JPEG/SRW/MP4 totalling 5 MB, verified byte-exact.
+- Re-run deduplicated, nothing overwritten; SysOff flag propagated to the
+  sink.
+- SSDP discovery over real multicast.
+- Pairing-file round trip; format matches the firmware parser exactly.
+
+What runs in CI only: Android compile, and the Espresso test that drives the
+real activity (direct mode -> Start -> simulated camera backs up -> bytes,
+log text and dedup verified -> Stop). The Android code is syntax-checked but
+not compiled, so expect the possibility of a small fix or two on the first CI
+run.
+
+App features: direct mode (app storage by default, any folder via the system
+picker — e.g. your Synology Drive folder), backend mode (streams to
+PUT /api/v1/files/{date}/{name}; contract in the README), pairing-zip export,
+foreground service with multicast/wake locks, live log. Backup only, as asked.
+
+Next step: push it, grab the APK, and do the first real-camera run with the
+log open — the simulator is built from firmware strings, not a live capture,
+so that first session is the real test.
+
+---------------------------------------------------------------------
+USER (16:12)
+Alright, then also include this chat in raw text format in the zip, and also
+add a documentation, for the app, the concept (backend, app), features,
+option, design decisions, etc. for later continuation
+
+CLAUDE
+[added docs/CHAT_TRANSCRIPT.txt (this file) and docs/DESIGN.md, repackaged]

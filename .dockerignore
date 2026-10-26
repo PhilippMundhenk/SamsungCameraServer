@@ -1,0 +1,11 @@
+app/
+docs/
+res/
+build/
+*/build/
+.gradle/
+.kotlin/
+.idea/
+.github/
+local.properties
+*.apk

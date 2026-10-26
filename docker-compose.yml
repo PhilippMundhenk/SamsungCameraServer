@@ -1,0 +1,28 @@
+# Self-hosted nxbackup server.
+#
+#   docker compose up -d
+#   open http://<host>:52235/  -> download pairing.zip, unzip into the SD card root
+#
+# Host networking is the simplest way to let the camera's SSDP discovery (UDP multicast, TTL 2)
+# reach the container. On Synology / Proxmox with VLANs use a macvlan network on the camera's
+# segment instead (see README).
+services:
+  nxbackup:
+    image: ghcr.io/philippmundhenk/nxbackup-server:main
+    # build: .                      # or build locally from this repository
+    container_name: nxbackup
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ./data:/data                # config, identity (pairing file), ledger, incoming/
+      - ./photos:/photos            # optional export target (e.g. a Synology Drive share)
+    environment:
+      # Every key of data/nxbackup.conf can be set here as NXBACKUP_<KEY>.
+      NXBACKUP_SERVER_NAME: "[PC]Home"
+      # NXBACKUP_SERVER_UDN: 4a682b0b-0361-dbae-6155-xxxxxxxxxxxx   # the UDN shown in the Android app
+      # NXBACKUP_API_TOKEN: change-me                              # must match the app's backend token
+      # NXBACKUP_EXIF_TIMESHIFT: "+1:00"
+      # NXBACKUP_RAW_CONVERT: "true"
+      # NXBACKUP_RENAME_PATTERN: "{yyyy}{MM}{dd}_{HH}{mm}{ss}_{base}.{ext}"
+      # NXBACKUP_EXPORT_DIR: /photos
+      # NXBACKUP_WEBHOOK_URL: http://homeassistant.lan:8123/api/webhook/nxbackup
