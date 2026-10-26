@@ -8,13 +8,18 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 IMG="${1:-nxbackup-server:smoke}"
 PORT="${PORT:-18080}"
-WORK="$(mktemp -d)"
+# Native path (pwd -W on Git Bash) so Windows Python and Docker volume mounts both understand it.
+WORK="$(pwd -W 2>/dev/null || pwd)/build/container-smoke"
+rm -rf "$WORK"
 export MSYS_NO_PATHCONV=1   # Git Bash: do not rewrite /data style container paths
 trap 'docker rm -f nxbackup-smoke >/dev/null 2>&1 || true; rm -rf "$WORK"' EXIT
 
 docker build -q -t "$IMG" . >/dev/null
 mkdir -p "$WORK/in" "$WORK/data" "$WORK/photos"
-python3 - "$WORK/in/SAM_0100.JPG" <<'EOF'
+# Windows ships a "python3" stub that only opens the Store; pick the interpreter that has Pillow.
+PY=""; for c in python3 python; do "$c" -c 'import PIL' >/dev/null 2>&1 && { PY="$c"; break; }; done
+[ -n "$PY" ] || { echo "need python with Pillow"; exit 1; }
+"$PY" - "$WORK/in/SAM_0100.JPG" <<'EOF'
 import sys
 from PIL import Image
 Image.new("RGB", (640, 480), (120, 80, 40)).save(sys.argv[1], quality=85)
