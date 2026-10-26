@@ -10,7 +10,8 @@ WORKDIR /src
 COPY settings.gradle.kts build.gradle.kts gradle.properties ./
 COPY core core
 COPY server server
-RUN gradle :server:installDist --no-daemon -q
+# in-process Kotlin compiler: no second JVM (Kotlin daemon) inside the build container
+RUN gradle :server:installDist --no-daemon -q -Dkotlin.compiler.execution.strategy=in-process
 
 FROM eclipse-temurin:17-jre-jammy
 # exiftool: time shift + rename metadata. libraw-bin: dcraw_emu for RAW -> JPEG previews
