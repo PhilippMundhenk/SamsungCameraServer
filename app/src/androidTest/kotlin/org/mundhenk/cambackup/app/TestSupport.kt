@@ -88,5 +88,5 @@ object TestSupport {
         }
     }
 
-    fun safRoot(): File = TestDocumentsProvider.root
+    fun safRoot(): File = TestDocumentsProvider.rootDir(context)
 }

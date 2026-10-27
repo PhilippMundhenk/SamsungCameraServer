@@ -64,7 +64,7 @@ class SettingsAndWizardTest {
     fun settingsPersistEverythingAndExportThePairingFile() {
         val prefs = Prefs(context)
         ActivityScenario.launch(SettingsActivity::class.java).use {
-            onView(withId(R.id.modePhone)).check(matches(isChecked()))
+            waitForUi { onView(withId(R.id.modePhone)).check(matches(isChecked())) }
             onView(withId(R.id.serverGroup)).check(matches(not(isDisplayed())))
             onView(withId(R.id.modePhoneAndServer)).perform(scrollTo(), tap())
             assertEquals(Mode.PHONE_AND_SERVER, prefs.mode)
@@ -86,6 +86,8 @@ class SettingsAndWizardTest {
             assertNull(prefs.folderUri)
             onView(withId(R.id.folderLabel)).check(matches(withText(R.string.folder_default)))
 
+            // server fields are only shown in the server modes
+            onView(withId(R.id.modePhoneAndServer)).perform(scrollTo(), tap())
             onView(withId(R.id.backendUrl)).perform(scrollTo(), replaceText("http://nas.lan:52235/"), closeSoftKeyboard())
             onView(withId(R.id.backendToken)).perform(scrollTo(), replaceText(" secret "), closeSoftKeyboard())
 
@@ -115,6 +117,7 @@ class SettingsAndWizardTest {
             pressBack()
         }
         // leaving the screen saved url/token/name
+        assertEquals(Mode.PHONE_AND_SERVER, prefs.mode)
         assertEquals("http://nas.lan:52235", prefs.backendUrl)
         assertEquals("secret", prefs.backendToken)
         assertEquals("[PC]Phone", prefs.serverName)
@@ -125,7 +128,7 @@ class SettingsAndWizardTest {
         BackupService.start(context); waitFor { BackupService.running }
         try {
             ActivityScenario.launch(SettingsActivity::class.java).use {
-                onView(withId(R.id.lockedNotice)).check(matches(isDisplayed()))
+                waitForUi { onView(withId(R.id.lockedNotice)).check(matches(isDisplayed())) }
                 onView(withId(R.id.modeServer)).check(matches(not(isEnabled())))
                 onView(withId(R.id.udn)).check(matches(not(isEnabled())))
             }
@@ -184,7 +187,7 @@ class SettingsAndWizardTest {
         val prefs = Prefs(context)
         prefs.setupDone = false
         ActivityScenario.launch(WizardActivity::class.java).use {
-            onView(withId(R.id.wizModeServer)).perform(scrollTo(), tap())
+            waitForUi { onView(withId(R.id.wizModeServer)).perform(scrollTo(), tap()) }
             onView(withId(R.id.next)).perform(tap())
             onView(withId(R.id.folderGroup)).check(matches(not(isDisplayed())))
             onView(withId(R.id.serverGroup)).check(matches(isDisplayed()))

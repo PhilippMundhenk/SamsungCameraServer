@@ -55,7 +55,7 @@ class MainFlowTest {
     @Test
     fun startServer_receiveBackupFromSimulatedCamera_listShowsChecks_stop() {
         ActivityScenario.launch(MainActivity::class.java).use {
-            onView(withId(R.id.status)).check(matches(withText(R.string.status_stopped)))
+            waitForUi { onView(withId(R.id.status)).check(matches(withText(R.string.status_stopped))) }
             onView(withId(R.id.empty)).check(matches(isDisplayed()))
             onView(withId(R.id.destination)).check(matches(withSubstring("Phone only")))
             onView(withId(R.id.startStop)).perform(tap())
@@ -116,7 +116,7 @@ class MainFlowTest {
     fun startFailsWhenThePortIsTaken() {
         ServerSocket(BackupServer.DEFAULT_HTTP_PORT).use {
             ActivityScenario.launch(MainActivity::class.java).use {
-                onView(withId(R.id.startStop)).perform(tap())
+                waitForUi { onView(withId(R.id.startStop)).perform(tap()) }
                 waitFor { LogBus.snapshot().any { l -> l.contains("Start failed") } }
                 Thread.sleep(500)
                 assertTrue(!BackupService.running)
@@ -134,7 +134,7 @@ class MainFlowTest {
     fun serverModeWithoutUrlOpensSettingsInsteadOfStarting() {
         Prefs(context).apply { mode = Mode.SERVER; backendUrl = "" }
         ActivityScenario.launch(MainActivity::class.java).use {
-            onView(withId(R.id.destination)).check(matches(withSubstring("Server only")))
+            waitForUi { onView(withId(R.id.destination)).check(matches(withSubstring("Server only"))) }
             onView(withId(R.id.startStop)).perform(tap())
             waitForUi { onView(withId(R.id.modeServer)).check(matches(isDisplayed())) } // settings opened
             assertTrue(!BackupService.running)

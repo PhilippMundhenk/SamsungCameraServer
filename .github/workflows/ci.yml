@@ -90,7 +90,15 @@ jobs:
           target: google_apis
           profile: pixel_6
           disable-animations: true
-          script: ./gradlew :app:connectedDebugAndroidTest :app:jacocoAndroidTestReport :app:jacocoAndroidTestCoverageVerification --no-daemon
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
+          # dismiss the keyguard / any "System UI isn't responding" dialog: Espresso otherwise
+          # fails with RootViewWithoutFocusException before the first test runs
+          script: |
+            adb shell wm dismiss-keyguard || true
+            adb shell input keyevent 82 || true
+            adb shell input keyevent 3 || true
+            adb shell settings put global hidden_api_policy 1 || true
+            ./gradlew :app:connectedDebugAndroidTest :app:jacocoAndroidTestReport :app:jacocoAndroidTestCoverageVerification --no-daemon
       - uses: actions/upload-artifact@v4
         if: always()
         with:

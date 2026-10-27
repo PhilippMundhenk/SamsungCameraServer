@@ -5,9 +5,12 @@
 #   docker build -t cambackup-server .
 #   docker build --build-arg EXTRA_PACKAGES=darktable -t cambackup-server .   # better RAW previews (large)
 
-FROM gradle:8.14-jdk17 AS build
+# The build stage always runs on the builder's own architecture: the JVM output is the same for
+# every target platform, so a multi-arch build does not compile Kotlin under QEMU.
+FROM --platform=$BUILDPLATFORM gradle:8.14-jdk17 AS build
 WORKDIR /src
 COPY settings.gradle.kts build.gradle.kts gradle.properties ./
+COPY gradle gradle
 COPY core core
 COPY server server
 # in-process Kotlin compiler: no second JVM (Kotlin daemon) inside the build container

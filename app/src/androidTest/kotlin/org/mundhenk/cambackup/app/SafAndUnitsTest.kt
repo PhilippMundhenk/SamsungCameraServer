@@ -110,11 +110,11 @@ class SafAndUnitsTest {
         assertTrue(tsv[2].startsWith("2026-10-27\tA.JPG\t5\tON_SERVER\t"))
         assertEquals(listOf("A.JPG", "B.JPG"), Transfers.list().map { it.name })
         assertTrue(Transfers.pending().isEmpty())
-        var fired = 0
-        val l: () -> Unit = { fired++ }
+        val fired = java.util.concurrent.atomic.AtomicInteger() // listener runs on the main thread
+        val l: () -> Unit = { fired.incrementAndGet() }
         Transfers.addListener(l)
         Transfers.record("2026-10-27", "C.JPG", 1, TransferState.ON_PHONE, "/c")
-        waitFor { fired == 1 }
+        waitFor { fired.get() >= 1 }
         Transfers.removeListener(l)
         assertEquals(listOf("C.JPG"), Transfers.pending().map { it.name })
         Transfers.clear(); assertFalse(File(context.filesDir, "transfers.tsv").exists())

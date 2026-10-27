@@ -1,12 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
-        <!-- SAF provider for the instrumented tests; same UID as the app, so no grants are needed. -->
+        <!-- Storage Access Framework provider for the instrumented tests (debug builds only).
+             DocumentsProvider demands exported + MANAGE_DOCUMENTS + grantUriPermissions; the app
+             can use it because the provider runs in its own process/UID. -->
         <provider
             android:name="org.mundhenk.cambackup.app.TestDocumentsProvider"
             android:authorities="org.mundhenk.cambackup.test.documents"
-            android:exported="false"
-            android:grantUriPermissions="true">
+            android:exported="true"
+            android:grantUriPermissions="true"
+            android:permission="android.permission.MANAGE_DOCUMENTS">
             <intent-filter>
                 <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
             </intent-filter>

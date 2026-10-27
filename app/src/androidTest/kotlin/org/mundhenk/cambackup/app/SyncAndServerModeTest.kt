@@ -55,7 +55,7 @@ class SyncAndServerModeTest {
     @Test
     fun phoneAndServer_uploadsAfterSessionAndOnDemand() {
         ActivityScenario.launch(MainActivity::class.java).use {
-            onView(withId(R.id.destination)).check(matches(withSubstring("Phone + server")))
+            waitForUi { onView(withId(R.id.destination)).check(matches(withSubstring("Phone + server"))) }
             onView(withId(R.id.syncNow)).check(matches(isDisplayed()))
             onView(withId(R.id.startStop)).perform(tap())
             waitFor { BackupService.running }
@@ -84,7 +84,8 @@ class SyncAndServerModeTest {
             assertTrue(backend.files.containsKey("2026-10-27/SAM_0002.SRW"))
             waitForUi { onView(withId(R.id.syncNow)).check(matches(withText(R.string.sync_now))) }
             assertTrue(LogBus.snapshot().any { it.contains("Sync: 1 uploaded, 0 failed, 0 missing") })
-            assertTrue(LogBus.snapshot().any { it.contains("Sync: everything is on the server") })
+            onView(withId(R.id.syncNow)).perform(tap()) // nothing left
+            waitFor { LogBus.snapshot().any { it.contains("Sync: everything is on the server") } }
 
             onView(withId(R.id.startStop)).perform(tap())
             waitFor { !BackupService.running }
@@ -129,7 +130,7 @@ class SyncAndServerModeTest {
     fun serverOnly_forwardsEverythingAndShowsDoubleChecks() {
         Prefs(context).mode = Mode.SERVER
         ActivityScenario.launch(MainActivity::class.java).use {
-            onView(withId(R.id.destination)).check(matches(withSubstring("Server only")))
+            waitForUi { onView(withId(R.id.destination)).check(matches(withSubstring("Server only"))) }
             onView(withId(R.id.syncNow)).check(matches(org.hamcrest.Matchers.not(isDisplayed())))
             onView(withId(R.id.startStop)).perform(tap())
             waitFor { BackupService.running }

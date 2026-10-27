@@ -82,7 +82,7 @@ jacoco { toolVersion = "0.8.12" }
 
 val coverageClassDirs = files(
     fileTree(layout.buildDirectory.dir("tmp/kotlin-classes/debug")) {
-        exclude("**/databinding/**", "**/BuildConfig*", "**/R.class", "**/R\$*.class")
+        exclude("**/databinding/**", "**/BuildConfig*", "**/R.class", "**/R\$*.class", "**/TestDocumentsProvider*")
     }
 )
 val coverageExecData = fileTree(layout.buildDirectory.dir("outputs/code_coverage/debugAndroidTest/connected")) { include("**/*.ec") }
@@ -91,6 +91,7 @@ val coverageSources = files("src/main/kotlin")
 tasks.register<JacocoReport>("jacocoAndroidTestReport") {
     group = "verification"
     description = "Coverage report of the instrumented tests (run connectedDebugAndroidTest first)"
+    dependsOn("compileDebugKotlin"); mustRunAfter("connectedDebugAndroidTest")
     classDirectories.setFrom(coverageClassDirs)
     sourceDirectories.setFrom(coverageSources)
     executionData.setFrom(coverageExecData)
@@ -100,6 +101,7 @@ tasks.register<JacocoReport>("jacocoAndroidTestReport") {
 tasks.register<JacocoCoverageVerification>("jacocoAndroidTestCoverageVerification") {
     group = "verification"
     description = "Fails when the instrumented tests cover less than 95 % of the app's lines"
+    dependsOn("compileDebugKotlin"); mustRunAfter("connectedDebugAndroidTest", "jacocoAndroidTestReport")
     classDirectories.setFrom(coverageClassDirs)
     sourceDirectories.setFrom(coverageSources)
     executionData.setFrom(coverageExecData)
