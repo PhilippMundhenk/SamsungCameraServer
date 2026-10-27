@@ -94,6 +94,34 @@ class ApiAndRelayTest {
         assertTrue(bos.toString("UTF-8").startsWith("usage: cambackup-server"))
     }
 
+    /** The container convention: state in /data, uploads in a separate volume (CAMBACKUP_STORAGE_DIR). */
+    @Test
+    fun uploadsLandInTheSeparateStorageDirectory() {
+        val photos = TestSupport.tempDir("cambackup-photos")
+        val export = TestSupport.tempDir("cambackup-export")
+        try {
+            val s = start(mapOf("CAMBACKUP_STORAGE_DIR" to photos.path, "CAMBACKUP_EXPORT_DIR" to export.path, "CAMBACKUP_EXPORT_SUBFOLDER" to "{yyyy}", "CAMBACKUP_EXIF_TOOL" to "no-exiftool-here"))
+            assertEquals(photos.absoluteFile, s.config.storageDir.absoluteFile)
+            val bytes = ByteArray(1000) { it.toByte() }
+            CameraSimulator("127.0.0.1", s.port) { log += it }.runBackup(listOf(
+                CameraSimulator.SimFile("A.JPG", "2026-10-27", "image/jpeg", bytes),
+                CameraSimulator.SimFile("B.JPG", "2026-10-27", "image/jpeg", bytes),
+            ))
+            s.pipeline.awaitIdle()
+            // nothing under <data>, both files went through /photos to /export
+            assertFalse(File(dataDir, "incoming").exists())
+            assertFalse(File(photos, "2026-10-27").listFiles()?.isNotEmpty() ?: false)
+            assertArrayEquals(bytes, File(export, "2026/A.JPG").readBytes())
+            assertEquals(File(export, "2026/B.JPG").path, s.ledger.find("2026-10-27", "B.JPG")!!.path)
+            assertTrue(File(dataDir, "received.tsv").isFile)
+            val (_, page) = http("GET", "http://127.0.0.1:${s.port}/")
+            assertTrue(page.contains(photos.path.replace("\\", "\\")) || page.contains(org.mundhenk.cambackup.core.UpnpXml.escape(photos.path)))
+            // without the override the default stays inside the data directory
+            val s2 = start(dir = File(dataDir, "second"))
+            assertEquals(File(File(dataDir, "second"), "incoming").absoluteFile, s2.config.storageDir.absoluteFile)
+        } finally { photos.deleteRecursively(); export.deleteRecursively() }
+    }
+
     @Test
     fun troubleshootingCommands() {
         val s = start(mapOf("NXBACKUP_SERVER_NAME" to "[PC]Sim").mapKeys { it.key.replace("NXBACKUP", "CAMBACKUP") })

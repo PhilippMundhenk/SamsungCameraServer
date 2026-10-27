@@ -24,9 +24,13 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends libimage-exiftool-perl libraw-bin ${EXTRA_PACKAGES} \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=build /src/server/build/install/cambackup-server /opt/cambackup
+# /data: config, identity (pairing file), ledger - small, back it up.
+# /photos: what the camera sends (<date>/<name>) - large, processed further later, lives elsewhere.
+# /export (optional): where the pipeline moves finished files (export.dir).
 ENV CAMBACKUP_DATA=/data \
+    CAMBACKUP_STORAGE_DIR=/photos \
     JAVA_OPTS="-Djava.awt.headless=true -Xmx512m"
-VOLUME ["/data"]
+VOLUME ["/data", "/photos"]
 # 52235/tcp: camera (UPnP), phone (API), browser (status page). 1900/udp: SSDP discovery.
 # Both only matter with bridge networking; use host networking (or macvlan) so the camera can find us.
 EXPOSE 52235/tcp 1900/udp

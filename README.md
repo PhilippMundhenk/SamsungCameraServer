@@ -47,7 +47,8 @@ services:
     network_mode: host          # the camera finds the server by multicast
     restart: unless-stopped
     volumes:
-      - ./data:/data            # config, pairing file, received files
+      - ./data:/data            # config, pairing file, ledger (small)
+      - ./photos:/photos        # received photos and videos (large)
     environment:
       CAMBACKUP_SERVER_NAME: "[PC]Home"
       CAMBACKUP_API_TOKEN: change-me   # the token the app uses

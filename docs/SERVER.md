@@ -14,8 +14,9 @@ services:
     network_mode: host            # the camera finds the server via multicast
     restart: unless-stopped
     volumes:
-      - ./data:/data              # config, identity, ledger, incoming/
-      - ./photos:/photos          # optional export target
+      - ./data:/data              # config, identity, ledger (small, back it up)
+      - ./photos:/photos          # received files, /photos/<date>/<name> (large)
+      # - /volume1/photo/export:/export   # optional export target (export.dir)
     environment:
       CAMBACKUP_SERVER_NAME: "[PC]Home"
       CAMBACKUP_API_TOKEN: change-me
@@ -31,17 +32,25 @@ Then open `http://<host>:52235/`: status, recent files, pipeline and tool state,
 Without Docker (JDK 17+): `./gradlew :server:installDist` and run
 `server/build/install/cambackup-server/bin/cambackup-server ./data`.
 
-## The data directory
+## Directories
 
-| File | Purpose |
+Two volumes with different lifecycles: the small state directory you back up, and the photos
+you process further and move elsewhere.
+
+| Volume | Contents |
 |---|---|
-| `cambackup.conf` | configuration, written with comments on first start |
-| `SAMSUNGAutoBackupDESC.ini` | the server identity = the pairing file (UDN, name) |
-| `received.tsv` | ledger of every file ever received (dedup survives renames/moves) |
-| `incoming/<date>/<name>` | uploads (`storage.dir`), unless exported elsewhere |
+| `/data` | `cambackup.conf` (configuration, written with comments on first start), `SAMSUNGAutoBackupDESC.ini` (the server identity = the pairing file), `received.tsv` (ledger of every file ever received; dedup survives renames and moves) |
+| `/photos` | what the camera sends: `/photos/<camera date>/<name>` (`storage.dir`, set to `/photos` by the image) |
+| `/export` (optional) | where the pipeline moves finished files when `export.dir=/export` is set, under `export.subfolder` |
 
-Every key of `cambackup.conf` can be overridden by an environment variable `CAMBACKUP_<KEY>`
-(dots → underscores, upper case). The file documents every key.
+Outside Docker, `storage.dir` defaults to `incoming` inside the data directory; relative paths
+resolve against the data directory. Every key of `cambackup.conf` can be overridden by an
+environment variable `CAMBACKUP_<KEY>` (dots → underscores, upper case); the image sets
+`CAMBACKUP_STORAGE_DIR=/photos`, which wins over the file. The file documents every key.
+
+Upgrading from a version that stored uploads under `/data/incoming`: move the date folders
+into the `photos` volume (`mv data/incoming/* photos/`). The ledger keeps the old paths in its
+"now at" column, but deduplication keys on date + name + size, so nothing is received twice.
 
 ## Options
 
@@ -51,7 +60,7 @@ Every key of `cambackup.conf` can be overridden by an environment variable `CAMB
 | `server.name` | from the ini | name shown on the camera |
 | `server.udn` | from the ini / generated | set it to the UDN shown in the app so one card works with both |
 | `ssdp.enabled` | `true` | answer camera discovery; `false` for a phone-only backend behind port mapping |
-| `storage.dir` | `incoming` | where uploads land |
+| `storage.dir` | `incoming` (`/photos` in the image) | where uploads land |
 | `api.token` | empty | bearer token the app must send (empty = anyone on the LAN can upload) |
 | `ui.enabled` | `true` | status page and pairing download |
 | `exif.timeshift` | off | shift all EXIF dates, exiftool syntax: `+1:00`, `-0:30`, `+0:0:1 0:0:0` |

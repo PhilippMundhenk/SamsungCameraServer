@@ -20,6 +20,11 @@ All notable changes to this project are documented here. The format follows
   the old one stop syncing; replaced UDNs are kept in a history in Settings and can be
   switched back to.
 
+### Changed
+- Container: received files land in a separate `/photos` volume (`CAMBACKUP_STORAGE_DIR=/photos`
+  set by the image); `/data` holds only config, identity and ledger; `/export` is the optional
+  export target. Move `data/incoming/*` into `photos/` when upgrading.
+
 ### Fixed
 - Truncated chunked uploads were accepted as complete.
 - Title overlapped the status bar on Android 15. (#2)

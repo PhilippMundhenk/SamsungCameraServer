@@ -14,8 +14,9 @@ services:
     network_mode: host
     restart: unless-stopped
     volumes:
-      - ./data:/data                # config, identity (pairing file), ledger, incoming/
-      - ./photos:/photos            # optional export target (e.g. a Synology Drive share)
+      - ./data:/data                # config, identity (pairing file), ledger (small, back it up)
+      - ./photos:/photos            # received files: /photos/<date>/<name> (large)
+      # - /volume1/photo/export:/export   # optional: the pipeline moves finished files here (export.dir)
     environment:
       # Every key of data/cambackup.conf can be set here as CAMBACKUP_<KEY>.
       CAMBACKUP_SERVER_NAME: "[PC]Home"
@@ -24,5 +25,5 @@ services:
       # CAMBACKUP_EXIF_TIMESHIFT: "+1:00"
       # CAMBACKUP_RAW_CONVERT: "true"
       # CAMBACKUP_RENAME_PATTERN: "{yyyy}{MM}{dd}_{HH}{mm}{ss}_{base}.{ext}"
-      # CAMBACKUP_EXPORT_DIR: /photos
+      # CAMBACKUP_EXPORT_DIR: /export
       # CAMBACKUP_WEBHOOK_URL: http://homeassistant.lan:8123/api/webhook/cambackup
