@@ -1,0 +1,29 @@
+# Changelog
+
+All notable changes to this project are documented here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
+[Semantic Versioning](https://semver.org/).
+
+## [Unreleased]
+
+### Added
+- Renamed to Samsung Camera Backup (code name `cambackup`); independence note everywhere.
+- Android: first-start wizard, settings screen, log screen, transfer list with ✓ (on the
+  phone) / ✓✓ (on the home server), new "phone + home server" store-and-forward mode with
+  "Sync to server". (#2, #3, #4)
+- Branding guide with shared light/dark tokens for the app and the server status page. (#5)
+- 95 % line-coverage gates in every module; Espresso suite covering every screen and mode;
+  JVM relay end-to-end camera → phone → home server. (#1)
+- CI: release APK, multi-arch image on GHCR, GitHub release on `v*` tags. (#7)
+- Server: `tools.path` to find exiftool / RAW converters outside `PATH`.
+
+### Fixed
+- Truncated chunked uploads were accepted as complete.
+- Title overlapped the status bar on Android 15. (#2)
+
+## [0.1.0] - 2026-10-26
+
+### Added
+- Protocol core (SSDP, UPnP MediaServer stub, uploads), Android app with direct and backend
+  modes, self-hosted server with ledger, pipeline (EXIF time shift, RAW preview, rename,
+  export, webhook, hooks), status page and pairing-file download, Docker image.

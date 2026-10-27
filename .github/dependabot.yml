@@ -1,0 +1,20 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly, day: monday, time: "06:00", timezone: Etc/UTC }
+    labels: [dependencies, github-actions]
+    groups:
+      actions-minor-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: docker
+    directory: /
+    schedule: { interval: weekly, day: monday, time: "06:00", timezone: Etc/UTC }
+    labels: [dependencies, docker]
+  - package-ecosystem: gradle
+    directory: /
+    schedule: { interval: weekly, day: monday, time: "06:00", timezone: Etc/UTC }
+    labels: [dependencies]
+    groups:
+      gradle-minor-patch:
+        update-types: [minor, patch]
