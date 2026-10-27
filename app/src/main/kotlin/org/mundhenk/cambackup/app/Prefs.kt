@@ -72,10 +72,38 @@ class Prefs(context: Context) {
         val name = nameInput?.trim().orEmpty()
         return try {
             val id = ServerIdentity(udn, name.ifBlank { ServerIdentity.DEFAULT_NAME }, ServerIdentity.DEFAULT_MAC)
-            this.udn = id.udn; this.serverName = id.friendlyName
+            switchUdn(id.udn); this.serverName = id.friendlyName
             null
         } catch (e: IllegalArgumentException) { e.message }
     }
+
+    // ---- UDN history: every UDN this phone ever advertised, newest first ----
+    // A camera only finds a server whose UDN is on its SD card, so replacing the UDN cuts off every
+    // camera paired with the old one. The history keeps the old codes so they can be put back.
+
+    data class UdnHistoryEntry(val udn: String, val replacedAt: Long)
+
+    val udnHistory: List<UdnHistoryEntry>
+        get() = (sp.getString("udnHistory", "") ?: "").lines().mapNotNull { line ->
+            val p = line.split('\t')
+            if (p.size >= 2 && p[1].isNotBlank()) UdnHistoryEntry(p[1], p[0].toLongOrNull() ?: 0) else null
+        }
+
+    /** Generates a fresh UDN; the current one goes into the history. Returns the new UDN. */
+    fun regenerateUdn(): String = ServerIdentity.generateUdn().also { switchUdn(it) }
+
+    /** Makes [target] the current UDN (e.g. one from the history); the current one goes into the history. */
+    fun switchUdn(target: String) {
+        val old = udn
+        if (old == target) return
+        val history = listOf(UdnHistoryEntry(old, System.currentTimeMillis())) + udnHistory.filter { it.udn != old && it.udn != target }
+        sp.edit()
+            .putString("udnHistory", history.take(MAX_UDN_HISTORY).joinToString("\n") { "${it.replacedAt}\t${it.udn}" })
+            .putString("udn", target)
+            .apply()
+    }
+
+    companion object { const val MAX_UDN_HISTORY = 20 }
 
     /** Short human readable destination for the status card. */
     fun destinationSummary(context: Context): String {

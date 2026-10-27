@@ -33,6 +33,29 @@ object Ui {
         controller.isAppearanceLightNavigationBars = !night  // dark icons on the white surface
     }
 
+    /**
+     * Changing the UDN cuts off every camera paired with the current one: always confirm, say so,
+     * and mention that the old code stays in the history. [onConfirm] runs only after "Generate".
+     */
+    fun confirmNewUdn(activity: Activity, currentUdn: String, onConfirm: () -> Unit) {
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(activity)
+            .setTitle(R.string.udn_new_title)
+            .setMessage(activity.getString(R.string.udn_new_message, currentUdn))
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.udn_new_confirm) { _, _ -> onConfirm() }
+            .show()
+    }
+
+    /** Same warning for switching back to a UDN from the history. */
+    fun confirmRestoreUdn(activity: Activity, previousUdn: String, onConfirm: () -> Unit) {
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(activity)
+            .setTitle(R.string.udn_restore_title)
+            .setMessage(activity.getString(R.string.udn_restore_message, previousUdn))
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.udn_restore_confirm) { _, _ -> onConfirm() }
+            .show()
+    }
+
     /** "Pictures/NX (primary)" for a SAF tree URI. */
     fun friendlyTree(uri: Uri): String =
         uri.lastPathSegment?.substringAfter(':')?.ifBlank { "/" }?.let { "$it (${uri.authority?.substringBefore('.')})" } ?: uri.toString()

@@ -91,6 +91,22 @@ class SafAndUnitsTest {
         assertEquals("4a682b0b-0361-dbae-6155-00000000abcd", prefs.udn); assertEquals("[PC]X", prefs.serverName)
         assertTrue(prefs.saveIdentity("bad", "x")!!.contains("UDN"))
         assertEquals(prefs.udn, prefs.identity().udn)
+        // UDN history: every replaced UDN is kept newest first, no duplicates, bounded
+        context.getSharedPreferences("cambackup", 0).edit().remove("udnHistory").commit()
+        val u1 = prefs.udn
+        val u2 = prefs.regenerateUdn()
+        assertEquals(u2, prefs.udn); assertEquals(listOf(u1), prefs.udnHistory.map { it.udn })
+        assertTrue(prefs.udnHistory[0].replacedAt > 0)
+        prefs.switchUdn(u2)                                    // same -> no-op
+        assertEquals(listOf(u1), prefs.udnHistory.map { it.udn })
+        assertNull(prefs.saveIdentity("4a682b0b-0361-dbae-6155-000000000003", "x"))  // manual edit counts too
+        assertEquals(listOf(u2, u1), prefs.udnHistory.map { it.udn })
+        prefs.switchUdn(u1)                                    // back to the first: leaves the history, current goes in
+        assertEquals(u1, prefs.udn); assertEquals(listOf("4a682b0b-0361-dbae-6155-000000000003", u2), prefs.udnHistory.map { it.udn })
+        repeat(25) { prefs.regenerateUdn() }
+        assertEquals(Prefs.MAX_UDN_HISTORY, prefs.udnHistory.size)
+        context.getSharedPreferences("cambackup", 0).edit().putString("udnHistory", "garbage\n\t\n12\t4a682b0b-0361-dbae-6155-0000000000aa").commit()
+        assertEquals(listOf("4a682b0b-0361-dbae-6155-0000000000aa"), prefs.udnHistory.map { it.udn })
         prefs.mode = Mode.PHONE; prefs.folderUri = null
         assertEquals("Phone only · App storage", prefs.destinationSummary(context))
         prefs.mode = Mode.SERVER; prefs.backendUrl = ""

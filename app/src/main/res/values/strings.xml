@@ -51,6 +51,17 @@
     <string name="export_pairing">Export pairing file (zip for the SD card)</string>
     <string name="pairing_help">Unzip into the SD card root → creates dlna_web_root/SAMSUNGAutoBackupDESC.ini. Repeat after formatting the card. Use the same UDN on the home server so one card works with both.</string>
     <string name="run_wizard_again">Run the setup wizard again</string>
+    <string name="cancel">Cancel</string>
+    <string name="udn_new_title">Generate a new UDN?</string>
+    <string name="udn_new_message">The camera only finds a server whose UDN is on its SD card. With a new UDN, cameras paired with the current one (%1$s) can no longer back up to this phone until you export the pairing file again and copy it to their cards.\n\nThe current UDN is kept in the history below, so you can switch back.</string>
+    <string name="udn_new_confirm">Generate</string>
+    <string name="udn_restore_title">Switch back to this UDN?</string>
+    <string name="udn_restore_message">%1$s becomes the current UDN again. Cameras paired with the UDN you use now will stop finding this phone; the one you switch to works with the cards that still carry it.</string>
+    <string name="udn_restore_confirm">Switch</string>
+    <string name="udn_history_title">Previous UDNs</string>
+    <string name="udn_history_empty">None yet. Every UDN you replace is kept here.</string>
+    <string name="udn_history_help">Tap a previous UDN to switch back to it (cards paired with it work again).</string>
+    <string name="udn_history_replaced">replaced %1$s</string>
 
     <!-- wizard -->
     <string name="wizard_title">Welcome to Samsung Camera Backup</string>

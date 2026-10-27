@@ -9,7 +9,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import org.mundhenk.cambackup.app.databinding.ActivitySettingsBinding
 import org.mundhenk.cambackup.core.PairingFile
-import org.mundhenk.cambackup.core.ServerIdentity
 
 /** Mode, destination, server connection and the identity the camera is paired with. */
 class SettingsActivity : AppCompatActivity() {
@@ -45,9 +44,39 @@ class SettingsActivity : AppCompatActivity() {
         b.backendToken.setText(prefs.backendToken)
         b.serverName.setText(prefs.serverName)
         b.udn.setText(prefs.udn)
-        b.regenerate.setOnClickListener { b.udn.setText(ServerIdentity.generateUdn()) }
+        b.regenerate.setOnClickListener {
+            Ui.confirmNewUdn(this, prefs.udn) {
+                val fresh = prefs.regenerateUdn()
+                b.udn.setText(fresh)
+                LogBus.log("New UDN uuid:$fresh (previous one kept in the history)")
+                showUdnHistory()
+            }
+        }
         b.exportPairing.setOnClickListener { if (save()) savePairing.launch("SAMSUNGAutoBackupDESC.zip") }
         b.showWizard.setOnClickListener { startActivity(Intent(this, WizardActivity::class.java)) }
+        showUdnHistory()
+    }
+
+    /** Previous UDNs, newest first; tapping one switches back to it (after a warning). */
+    private fun showUdnHistory() {
+        val history = prefs.udnHistory
+        b.udnHistory.removeAllViews()
+        b.udnHistoryEmpty.visibility = if (history.isEmpty()) View.VISIBLE else View.GONE
+        for (entry in history) {
+            val row = layoutInflater.inflate(R.layout.item_udn_history, b.udnHistory, false)
+            row.findViewById<android.widget.TextView>(R.id.historyUdn).text = entry.udn
+            row.findViewById<android.widget.TextView>(R.id.historyDate).text = getString(R.string.udn_history_replaced, Ui.formatTime(entry.replacedAt))
+            row.isEnabled = !BackupService.running
+            row.setOnClickListener {
+                Ui.confirmRestoreUdn(this, entry.udn) {
+                    prefs.switchUdn(entry.udn)
+                    b.udn.setText(entry.udn)
+                    LogBus.log("Switched back to UDN uuid:${entry.udn}")
+                    showUdnHistory()
+                }
+            }
+            b.udnHistory.addView(row)
+        }
     }
 
     override fun onResume() {
@@ -55,6 +84,7 @@ class SettingsActivity : AppCompatActivity() {
         val locked = BackupService.running
         b.lockedNotice.visibility = if (locked) View.VISIBLE else View.GONE
         for (v in listOf(b.modePhone, b.modePhoneAndServer, b.modeServer, b.chooseFolder, b.resetFolder, b.backendUrl, b.backendToken, b.serverName, b.udn, b.regenerate)) v.isEnabled = !locked
+        showUdnHistory()
     }
 
     override fun onPause() {

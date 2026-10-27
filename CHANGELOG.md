@@ -16,6 +16,9 @@ All notable changes to this project are documented here. The format follows
   JVM relay end-to-end camera → phone → home server. (#1)
 - CI: release APK, multi-arch image on GHCR, GitHub release on `v*` tags. (#7)
 - Server: `tools.path` to find exiftool / RAW converters outside `PATH`.
+- Android: generating a new UDN asks for confirmation and explains that cameras paired with
+  the old one stop syncing; replaced UDNs are kept in a history in Settings and can be
+  switched back to.
 
 ### Fixed
 - Truncated chunked uploads were accepted as complete.

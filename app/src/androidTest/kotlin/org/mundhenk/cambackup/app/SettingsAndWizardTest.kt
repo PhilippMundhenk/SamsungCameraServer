@@ -16,7 +16,10 @@ import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.intent.Intents
 import androidx.test.espresso.intent.Intents.intending
 import androidx.test.espresso.intent.matcher.IntentMatchers.hasAction
+import androidx.test.espresso.matcher.RootMatchers.isDialog
+import androidx.test.espresso.matcher.ViewMatchers.hasDescendant
 import androidx.test.espresso.matcher.ViewMatchers.isChecked
+import androidx.test.espresso.matcher.ViewMatchers.withParent
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.isEnabled
 import androidx.test.espresso.matcher.ViewMatchers.withId
@@ -55,6 +58,9 @@ class SettingsAndWizardTest {
 
     @After
     fun tearDown() { Intents.release(); TestSupport.reset(Mode.PHONE) }
+
+    /** The clickable row of a previous UDN in Settings. */
+    private fun historyRow(udn: String) = org.hamcrest.Matchers.allOf(withParent(withId(R.id.udnHistory)), hasDescendant(withText(udn)))
 
     private fun answerPicker(action: String, uri: Uri?) {
         intending(hasAction(action)).respondWith(Instrumentation.ActivityResult(if (uri == null) Activity.RESULT_CANCELED else Activity.RESULT_OK, uri?.let { Intent().setData(it) }))
@@ -95,7 +101,30 @@ class SettingsAndWizardTest {
             onView(withId(R.id.udn)).perform(scrollTo(), replaceText("not-a-udn"), closeSoftKeyboard())
             onView(withId(R.id.exportPairing)).perform(scrollTo(), tap())
             assertTrue(Intents.getIntents().none { it.action == Intent.ACTION_CREATE_DOCUMENT })
+            // new UDN: cancelled -> unchanged; confirmed -> changed, the old one is in the history
+            onView(withId(R.id.udn)).perform(scrollTo(), replaceText(prefs.udn), closeSoftKeyboard())
+            val before = prefs.udn
             onView(withId(R.id.regenerate)).perform(scrollTo(), tap())
+            onView(withText(R.string.cancel)).inRoot(isDialog()).perform(tap())
+            assertEquals(before, prefs.udn)
+            assertTrue(prefs.udnHistory.isEmpty())
+            onView(withId(R.id.udn)).check(matches(withText(before)))
+            onView(withId(R.id.regenerate)).perform(scrollTo(), tap())
+            onView(withText(R.string.udn_new_confirm)).inRoot(isDialog()).perform(tap())
+            assertNotEquals(before, prefs.udn)
+            assertEquals(listOf(before), prefs.udnHistory.map { it.udn })
+            onView(withId(R.id.udn)).check(matches(withText(prefs.udn)))
+            onView(withId(R.id.udnHistoryEmpty)).check(matches(not(isDisplayed())))
+            // switch back from the history (cancel first, then confirm)
+            onView(historyRow(before)).perform(scrollTo(), tap())
+            onView(withText(R.string.cancel)).inRoot(isDialog()).perform(tap())
+            assertNotEquals(before, prefs.udn)
+            val generated = prefs.udn
+            onView(historyRow(before)).perform(scrollTo(), tap())
+            onView(withText(R.string.udn_restore_confirm)).inRoot(isDialog()).perform(tap())
+            assertEquals(before, prefs.udn)
+            assertEquals(listOf(generated), prefs.udnHistory.map { it.udn })
+            onView(withId(R.id.udn)).check(matches(withText(before)))
             onView(withId(R.id.serverName)).perform(scrollTo(), replaceText("  [PC]Phone "), closeSoftKeyboard())
             // export: cancelled, failing target, then a document in the test provider
             answerPicker(Intent.ACTION_CREATE_DOCUMENT, null)
@@ -166,7 +195,12 @@ class SettingsAndWizardTest {
             onView(withId(R.id.next)).perform(tap())
             val before = prefs.udn
             onView(withId(R.id.regenerate)).perform(scrollTo(), tap())
+            onView(withText(R.string.cancel)).inRoot(isDialog()).perform(tap())
+            assertEquals(before, prefs.udn)
+            onView(withId(R.id.regenerate)).perform(scrollTo(), tap())
+            onView(withText(R.string.udn_new_confirm)).inRoot(isDialog()).perform(tap())
             assertNotEquals(before, prefs.udn)
+            assertEquals(before, prefs.udnHistory.first().udn)
             onView(withId(R.id.udn)).check(matches(withText(prefs.udn)))
             onView(withId(R.id.serverName)).perform(scrollTo(), replaceText(""), closeSoftKeyboard())
             answerPicker(Intent.ACTION_CREATE_DOCUMENT, TestDocumentsProvider.documentUri("wizard.zip"))

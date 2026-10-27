@@ -24,7 +24,12 @@ The camera only talks to a server whose identity is on its SD card. Give the ser
 (shown on the camera), then **Export pairing file**: it saves `SAMSUNGAutoBackupDESC.zip`;
 unzip it into the SD card root. The UDN is generated once and kept. Put the same UDN into the
 home server (`server.udn`) so one card works with both targets. Export again after formatting
-the card. "New UDN" invalidates every card paired so far.
+the card.
+
+**Changing the UDN** ("New UDN", or editing the field) cuts off every camera paired with the
+current one, so the app asks for confirmation and explains that first. Every replaced UDN is
+kept under *Previous UDNs* in Settings; tap one to switch back to it (again with a warning),
+which makes the cards that still carry it work again.
 
 ## Daily use
 

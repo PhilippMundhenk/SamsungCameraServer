@@ -6,7 +6,6 @@ import android.view.View
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import org.mundhenk.cambackup.app.databinding.ActivityWizardBinding
-import org.mundhenk.cambackup.core.ServerIdentity
 
 /**
  * First-start wizard, three steps: where photos go -> destination details -> pairing file.
@@ -35,7 +34,9 @@ class WizardActivity : AppCompatActivity() {
         b.chooseFolder.setOnClickListener { pickFolder.launch(prefs.folderUri) }
         b.backendUrl.setText(prefs.backendUrl); b.backendToken.setText(prefs.backendToken)
         b.serverName.setText(prefs.serverName); b.udn.text = prefs.udn
-        b.regenerate.setOnClickListener { prefs.udn = ServerIdentity.generateUdn(); b.udn.text = prefs.udn }
+        b.regenerate.setOnClickListener {
+            Ui.confirmNewUdn(this, prefs.udn) { b.udn.text = prefs.regenerateUdn(); LogBus.log("New UDN uuid:${prefs.udn} (previous one kept in the history)") }
+        }
         b.exportPairing.setOnClickListener { if (saveIdentity()) savePairing.launch("SAMSUNGAutoBackupDESC.zip") }
         b.next.setOnClickListener { next() }
         b.back.setOnClickListener { if (step == 0) finish() else show(step - 1) }
