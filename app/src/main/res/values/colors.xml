@@ -1,7 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Brand tokens, see docs/BRANDING.md. The night variants live in values-night/colors.xml. -->
 <resources>
-    <color name="ic_launcher_background">#0D47A1</color>
-    <color name="primary">#0D47A1</color>
-    <color name="primary_variant">#002171</color>
-    <color name="secondary">#1E88E5</color>
+    <color name="ic_launcher_background">#2A6FDB</color>
+    <color name="primary">#2A6FDB</color>
+    <color name="on_primary">#FFFFFF</color>
+    <color name="primary_container">#D6E4FA</color>
+    <color name="on_primary_container">#0B2A5B</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="on_surface">#1A1A1A</color>
+    <color name="surface_container">#F7F7F7</color>
+    <color name="on_surface_variant">#666666</color>
+    <color name="outline">#E3E3E3</color>
+    <color name="ok">#2E7D32</color>
+    <color name="error">#C62828</color>
+    <color name="muted">#666666</color>
+    <!-- transfer states -->
+    <color name="state_phone">#666666</color>
+    <color name="state_server">#2A6FDB</color>
 </resources>

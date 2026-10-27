@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="primary">#8AB4F8</color>
+    <color name="on_primary">#0B2A5B</color>
+    <color name="primary_container">#1B3A6B</color>
+    <color name="on_primary_container">#D6E4FA</color>
+    <color name="surface">#121212</color>
+    <color name="on_surface">#EEEEEE</color>
+    <color name="surface_container">#1E1E1E</color>
+    <color name="on_surface_variant">#AAAAAA</color>
+    <color name="outline">#333333</color>
+    <color name="ok">#81C995</color>
+    <color name="error">#F28B82</color>
+    <color name="muted">#AAAAAA</color>
+    <color name="state_phone">#AAAAAA</color>
+    <color name="state_server">#8AB4F8</color>
+</resources>

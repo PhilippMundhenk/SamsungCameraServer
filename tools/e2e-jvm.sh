@@ -15,5 +15,5 @@ rm -rf "$OUT"; mkdir -p "$OUT"
 STDLIB="$(ls "$KOTLIN_LIB"/kotlin-stdlib-*.jar | head -1)"
 java -cp "$KOTLIN_LIB/*" org.jetbrains.kotlin.cli.jvm.K2JVMCompiler \
   -no-stdlib -cp "$STDLIB" -d "$OUT" $(find core/src/main/kotlin -name '*.kt') 2>&1 | grep -v -E '^Picked up|^warning:' || true
-test -f "$OUT/org/mundhenk/nxbackup/core/MainKt.class" || { echo "compile failed"; exit 1; }
-java -cp "$OUT:$STDLIB" org.mundhenk.nxbackup.core.MainKt e2e "$@"
+test -f "$OUT/org/mundhenk/cambackup/core/MainKt.class" || { echo "compile failed"; exit 1; }
+java -cp "$OUT:$STDLIB" org.mundhenk.cambackup.core.MainKt e2e "$@"

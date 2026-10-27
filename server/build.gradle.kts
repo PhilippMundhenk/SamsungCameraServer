@@ -15,8 +15,8 @@ kotlin {
 }
 
 application {
-    mainClass.set("org.mundhenk.nxbackup.server.MainKt")
-    applicationName = "nxbackup-server"
+    mainClass.set("org.mundhenk.cambackup.server.MainKt")
+    applicationName = "cambackup-server"
 }
 
 dependencies {

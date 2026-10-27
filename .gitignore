@@ -6,3 +6,4 @@ build/
 local.properties
 /res/
 dist/
+app/release.keystore

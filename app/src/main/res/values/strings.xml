@@ -1,33 +1,75 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">NX Backup</string>
-    <string name="title">Samsung camera Auto Backup target</string>
+    <string name="app_name">Samsung Camera Backup</string>
+    <string name="settings">Settings</string>
+    <string name="change">Change</string>
 
-    <string name="section_mode">Mode</string>
-    <string name="mode_direct">Save to folder on this phone</string>
-    <string name="mode_backend">Forward to backend server</string>
-    <string name="folder_label">Folder</string>
-    <string name="folder_default">App storage (Android/data/org.mundhenk.nxbackup/files/NXBackup)</string>
-    <string name="choose_folder">Choose folder…</string>
-    <string name="backend_url_hint">Backend URL, e.g. http://nas.lan:52235</string>
-    <string name="backend_token_hint">Backend token (api.token on the server, optional)</string>
-
-    <string name="section_identity">Server identity (must match the pairing file)</string>
-    <string name="name_hint">Name shown on camera</string>
-    <string name="udn_hint">UDN</string>
-    <string name="regenerate">New UDN</string>
-    <string name="export_pairing">Export pairing file (zip for SD card)</string>
-    <string name="pairing_help">Unzip into the SD card root → creates dlna_web_root/SAMSUNGAutoBackupDESC.ini. Repeat after formatting the card.</string>
-
+    <!-- main screen -->
+    <string name="status_stopped">Stopped</string>
+    <string name="status_stopped_hint">Start the server, then choose Auto Backup on the camera.</string>
+    <string name="status_running">Running</string>
+    <string name="status_running_hint">Waiting for the camera: Wi-Fi → Auto Backup (or Smart Link).</string>
     <string name="start">Start server</string>
     <string name="stop">Stop server</string>
-    <string name="status_stopped">Stopped</string>
-    <string name="status_running">Running — camera: Wi-Fi → Auto Backup (or Smart Link)</string>
+    <string name="sync_now">Sync to server</string>
+    <string name="sync_now_pending">Sync to server (%1$d waiting)</string>
+    <string name="sync_running">Syncing…</string>
+    <string name="sync_already_running">Sync is already running</string>
+    <string name="transfers_title">Transferred photos</string>
+    <string name="transfers_title_n">Transferred photos (%1$d)</string>
+    <string name="transfers_empty">Nothing received yet.\n✓ on this phone · ✓✓ on the home server</string>
+    <string name="transfer_details">%1$s · %2$s · %3$s</string>
+    <string name="state_on_phone">On this phone</string>
+    <string name="state_on_server">On the server</string>
+    <string name="clear_transfers">Clear list</string>
+    <string name="dest_phone">Phone only · %1$s</string>
+    <string name="dest_phone_and_server">Phone + server · %1$s → %2$s</string>
+    <string name="dest_server">Server only · %1$s</string>
+    <string name="folder_default_short">App storage</string>
+    <string name="error_no_server_url">Enter the server URL first</string>
+
+    <!-- settings -->
+    <string name="settings_locked">Stop the server to change these settings.</string>
+    <string name="section_mode">Where photos go</string>
+    <string name="mode_phone">Phone only</string>
+    <string name="mode_phone_and_server">Phone + home server</string>
+    <string name="mode_server">Home server only</string>
+    <string name="mode_phone_long">Phone only: keep photos in a folder on this phone (✓)</string>
+    <string name="mode_phone_and_server_long">Phone + home server: keep them here and upload to the server whenever it is reachable (✓ → ✓✓)</string>
+    <string name="mode_server_long">Home server only: forward straight to the server, nothing stays on the phone (✓✓)</string>
+    <string name="section_folder">Folder on this phone</string>
+    <string name="folder_default">App storage (Android/data/org.mundhenk.cambackup/files/CamBackup)</string>
+    <string name="choose_folder">Choose folder…</string>
+    <string name="folder_reset">Use app storage</string>
+    <string name="section_server">Home server</string>
+    <string name="backend_url_hint">Server URL, e.g. http://nas.lan:52235</string>
+    <string name="backend_token_hint">Token (api.token on the server, optional)</string>
+    <string name="section_identity">Identity (must match the pairing file)</string>
+    <string name="name_hint">Name shown on the camera</string>
+    <string name="udn_hint">UDN</string>
+    <string name="regenerate">New UDN</string>
+    <string name="export_pairing">Export pairing file (zip for the SD card)</string>
+    <string name="pairing_help">Unzip into the SD card root → creates dlna_web_root/SAMSUNGAutoBackupDESC.ini. Repeat after formatting the card. Use the same UDN on the home server so one card works with both.</string>
+    <string name="run_wizard_again">Run the setup wizard again</string>
+
+    <!-- wizard -->
+    <string name="wizard_title">Welcome to Samsung Camera Backup</string>
+    <string name="wizard_step">Step %1$d of %2$d</string>
+    <string name="wizard_mode_question">Where should photos from the camera go?</string>
+    <string name="wizard_checks_help">The list on the main screen shows ✓ when a photo is on this phone and ✓✓ when it has reached the home server.</string>
+    <string name="wizard_server_help">The home server runs cambackup-server (Docker). Its status page shows the URL and the token to use here.</string>
+    <string name="wizard_pairing_intro">The camera only talks to a server whose identity is on its SD card. Give the server a name, export the pairing file and unzip it onto the card.</string>
+    <string name="wizard_next">Next</string>
+    <string name="wizard_back">Back</string>
+    <string name="wizard_skip">Skip</string>
+    <string name="wizard_finish">Done</string>
+
+    <!-- log -->
     <string name="log_label">Log</string>
     <string name="clear_log">Clear</string>
 
     <string name="notif_channel">Backup server</string>
-    <string name="notif_title">NX Backup server running</string>
+    <string name="notif_title">Samsung Camera Backup server running</string>
     <string name="notif_text">Waiting for the camera…</string>
     <string name="pairing_saved">Pairing file saved</string>
     <string name="pairing_failed">Could not save pairing file</string>

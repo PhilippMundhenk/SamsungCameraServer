@@ -486,13 +486,13 @@ blocked; Gradle 8.14.3's embedded Kotlin compiler works standalone. Built the
 project: core (pure Kotlin JVM) + app (Android) + Espresso UI test + GitHub
 Actions. Ran tools/e2e-jvm.sh here: loopback server <-> simulated camera,
 5 MB over JPEG/SRW/MP4 byte-exact, dedup on re-run, SysOff propagated, SSDP
-multicast discovery — all passed. Delivered nxbackup-workspace.zip.]
+multicast discovery — all passed. Delivered cambackup-workspace.zip.]
 
-Workspace delivered as nxbackup-workspace.zip. One thing I have to be plain
+Workspace delivered as cambackup-workspace.zip. One thing I have to be plain
 about: there is no APK in it. This session cannot reach Google's SDK/Maven
 servers, so the Android module couldn't be compiled or run here. The project
 ships with a GitHub Actions workflow that builds the debug APK and runs the
-UI tests on an emulator — push it to a repo and the nxbackup-debug-apk
+UI tests on an emulator — push it to a repo and the cambackup-debug-apk
 artifact appears on the first run.
 
 What was actually tested here (JVM core, same code the app uses):

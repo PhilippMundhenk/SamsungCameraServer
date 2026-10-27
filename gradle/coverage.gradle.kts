@@ -2,7 +2,7 @@
 // Applied from the module build files with `apply(from = "../gradle/coverage.gradle.kts")`.
 //
 // Excluded: the `main` process wrappers (MainKt) — they block the JVM forever and only call
-// into tested code (Cli / NxBackupServer).
+// into tested code (Cli / CamBackupServer).
 
 apply(plugin = "jacoco")
 

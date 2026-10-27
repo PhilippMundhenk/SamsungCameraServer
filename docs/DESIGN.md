@@ -1,9 +1,10 @@
-# nxbackup — design and continuation notes
+# cambackup — design and continuation notes
 
-Status date: 2026-10-26 (evening: server module added, Android app compiled and UI-tested on an
-emulator). Author: Philipp Mundhenk with Claude. Working name "nxbackup" (not checked for
-trademark/domain collisions — rename before publishing). Repository:
-https://github.com/PhilippMundhenk/SamsungCameraServer
+Status date: 2026-10-27 (app restructured: wizard, settings, transfer list with ✓/✓✓,
+store-and-forward mode; 95 % coverage gates; release pipeline). Author: Philipp Mundhenk with
+Claude. Name: **Samsung Camera Backup**, code name `cambackup` (an independent project, no
+relation to Samsung; see docs/BRANDING.md). Repository:
+https://github.com/PhilippMundhenk/SamsungCameraServer — work items are GitHub issues.
 
 ## 1. Goal
 
@@ -92,9 +93,9 @@ core/  (Kotlin, JVM, zero dependencies — runs on Android and on servers/CI)
   CameraSimulator  acts like the camera (used by JVM e2e, Espresso e2e, manual tests)
   Main             CLI: serve <dir> | pairing <name> | e2e [--ssdp]
 server/ (Kotlin/JVM, depends only on core; Docker image eclipse-temurin 17 + exiftool + libraw)
-  Config           <data>/nxbackup.conf (properties, commented defaults written on first start)
-                   + env overrides NXBACKUP_<KEY>
-  Main             NxBackupServer.start(dataDir): wires everything; identity lives in
+  Config           <data>/cambackup.conf (properties, commented defaults written on first start)
+                   + env overrides CAMBACKUP_<KEY>
+  Main             CamBackupServer.start(dataDir): wires everything; identity lives in
                    <data>/SAMSUNGAutoBackupDESC.ini (the pairing file itself), overridable by
                    server.udn / server.name so phone and server share one UDN
   Ledger           <data>/received.tsv — every file ever received (date, name, size, current
@@ -109,11 +110,21 @@ server/ (Kotlin/JVM, depends only on core; Docker image eclipse-temurin 17 + exi
                    /api/v1/events, /api/v1/status, /api/v1/log, /health, status page at /,
                    /pairing.zip; bearer token (api.token) protects the phone endpoints
   Tools            runs external programs, probes availability once (shown on status page)
-app/   (Android, minSdk 26, Views + Material 3, ViewBinding)
-  MainActivity     mode, folder picker (SAF), backend URL, identity, pairing export, log
-  BackupService    foreground service (dataSync); MulticastLock + WifiLock + WakeLock
-  Sinks            SafSink (DocumentFile tree), BackendSink (HTTP PUT), default app folder
-  Prefs            SharedPreferences; UDN generated once and persisted
+app/   (Android, minSdk 26, Views + Material 3, ViewBinding; tokens from docs/BRANDING.md)
+  MainActivity     status card (running dot, destination, Start/Stop, Sync), transfer list
+                   (RecyclerView, ✓ / ✓✓), toolbar -> Log, Settings; opens the wizard on first start
+  WizardActivity   3 steps: mode -> destination (folder / server URL + token) -> pairing
+  SettingsActivity mode, folder picker (SAF), server URL/token, identity, pairing export;
+                   locked while the server runs
+  LogActivity      the LogBus ring buffer with a clear action
+  BackupService    foreground service (dataSync); MulticastLock + WifiLock + WakeLock;
+                   buildSink() picks the sink for the mode and wraps it in RecordingSink
+  Sinks            LocalSink = FileSink (app folder) | SafSink (DocumentFile tree): store +
+                   open() for later upload; BackendSink lives in core
+  Transfers        the ✓/✓✓ list, persisted as transfers.tsv (append, last line wins)
+  Uploader         RecordingSink (records every stored file) + deferred upload of ON_PHONE
+                   entries to the home server (after each session, "Sync to server")
+  Prefs            SharedPreferences; Mode PHONE | PHONE_AND_SERVER | SERVER; UDN generated once
   LogBus           in-process log ring buffer feeding the UI
 ```
 
@@ -157,15 +168,23 @@ app/   (Android, minSdk 26, Views + Material 3, ViewBinding)
 
 | Option | Where | Notes |
 |---|---|---|
-| Mode: direct / backend | main screen | locked while server runs |
-| Folder (direct) | "Choose folder…" (SAF) | default: `Android/data/org.mundhenk.nxbackup/files/NXBackup` |
-| Backend URL (backend) | text field | base URL, e.g. `http://nas.lan:52235` |
-| Backend token (backend) | password field | optional; must equal the server's `api.token` |
+| Mode: phone / phone + server / server | wizard step 1, Settings | locked while server runs; legacy prefs DIRECT/BACKEND map to phone/server |
+| Folder (phone modes) | "Choose folder…" (SAF) | default: `Android/data/org.mundhenk.cambackup/files/CamBackup` |
+| Server URL (server modes) | text field | base URL, e.g. `http://nas.lan:52235`; required before Start |
+| Server token | password field | optional; must equal the server's `api.token` |
 | Server name | text field | shown on camera; default `[PC]AutoBackup` |
-| UDN | text field + "New UDN" | must keep Samsung prefix; regenerating requires re-pairing |
-| Export pairing file | button | `SAMSUNGAutoBackupDESC.zip` via system file picker |
-| Start / Stop | button / notification action | foreground service |
-| Log | text view | last 400 lines, also in logcat tag `NXBackup` |
+| UDN | Settings field + "New UDN" | must keep Samsung prefix; regenerating requires re-pairing |
+| Export pairing file | wizard step 3, Settings | `SAMSUNGAutoBackupDESC.zip` via system file picker |
+| Start / Stop | status card / notification action | foreground service |
+| Sync to server | status card (phone + server mode) | uploads every ✓ file; also runs after each camera session |
+| Transfer list | main screen | newest first; ✓ on phone, ✓✓ on server; "Clear list" in the overflow menu |
+| Log | toolbar → Log screen | last 400 lines, also in logcat tag `CamBackup` |
+
+Store-and-forward details: `Transfers` is the source of truth for "what still has to go to the
+server". The uploader checks `/health` first, uploads in arrival order, stops at the first 401
+(wrong token), marks files that vanished from the phone as missing, and never runs twice at the
+same time. The transfer list is purely informational for the server-only mode (everything is ✓✓
+immediately).
 
 Hard-coded for now (make configurable if needed): HTTP port 52235, `fileExistsErrorCode`
 (off), SSDP notify interval 30 s, date-subfolder layout.
@@ -186,8 +205,8 @@ PUT bodies are accepted (the app uses them when the camera sent no size).
 
 * Kotlin/JVM on the tested `core`; no framework. `docker-compose.yml` with `network_mode: host`;
   `macvlan` on the camera VLAN is the alternative (SSDP TTL 2). Image published by CI to
-  `ghcr.io/<owner>/nxbackup-server`.
-* Config keys (all in `nxbackup.conf`, env `NXBACKUP_<KEY>`): `http.port`, `server.name`,
+  `ghcr.io/<owner>/cambackup-server`.
+* Config keys (all in `cambackup.conf`, env `CAMBACKUP_<KEY>`): `http.port`, `server.name`,
   `server.udn`, `ssdp.enabled`, `storage.dir`, `api.token`, `ui.enabled`, `exif.timeshift`,
   `exif.tool`, `raw.convert`, `raw.converter` (auto|darktable|rawtherapee|dcraw|none),
   `raw.onlyifnojpeg`, `raw.quality`, `rename.pattern`, `export.dir`, `export.subfolder`,
@@ -222,21 +241,37 @@ information itself (our pairing file), backs up only new files, can shut the PC 
 
 ## 8. Build / test / CI
 
+Coverage target: **95 % lines per module**, enforced by JaCoCo (`gradle/coverage.gradle.kts` for
+core and server; `jacocoAndroidTestCoverageVerification` in `app/build.gradle.kts` over the
+instrumented-test `.ec` files). Only the `main` process wrappers (`MainKt`) and generated
+view-binding/R classes are excluded.
+
 * `tools/e2e-jvm.sh [--ssdp]` — compiles `core` with a standalone Kotlin compiler and runs the
   loopback end-to-end (used in the original session where Gradle had no network).
-* `./gradlew :core:test` — JUnit + the same e2e. `./gradlew :server:test` — six server tests:
-  camera session + dedup + restart, phone API contract incl. 401 and chunked PUT, pipeline
-  rename/export/webhook, identity overrides, PPM→JPEG, JSON helpers.
-* `./gradlew :app:assembleDebug` — APK; `:app:connectedDebugAndroidTest` — Espresso e2e.
-  Both verified locally on 2026-10-26 (JBR 21, AGP 8.7.3, emulator API 37). Espresso 3.7.0 /
-  androidx.test 1.7.0 are required on API 36+ (3.6.1 crashes in InputManager). On a slow
-  software-rendered emulator the service stop can take >15 s to be delivered, hence the 45 s
-  waits in the test.
+* `./gradlew :core:check` — JUnit: the loopback e2e, HTTP server edge cases (chunked bodies,
+  HEAD, 100-continue, malformed requests), every UPnP/SOAP action incl. faults and the
+  `fileExistsErrorCode` path, SSDP responder on a free UDP port (unicast M-SEARCH), BackendSink
+  against a scripted backend, CLI, sinks, pairing validation.
+* `./gradlew :server:check` — camera session + dedup + restart, phone API contract incl. 401 /
+  chunked PUT / malformed paths / short uploads, config precedence, ledger garbage tolerance,
+  Tools (search path, timeout, shell), every pipeline stage with fake `exiftool`, `dcraw_emu`,
+  `darktable-cli`, `rawtherapee-cli` written into `tools.path` (Windows `.cmd` / POSIX sh),
+  hooks + webhook + SysOff, PPM reader errors, and the **phone relay e2e**: camera simulator →
+  core `BackupServer` + `BackendSink` (what the app runs) → home server → disk/ledger/pipeline.
+* `./gradlew :app:connectedDebugAndroidTest :app:jacocoAndroidTestCoverageVerification` —
+  Espresso: phone mode e2e with the ✓ list and Log screen, phone + server mode (automatic upload,
+  server down → "waiting", Sync button), server-only mode, Uploader edge cases, settings (mode,
+  SAF folder via a `TestDocumentsProvider` in the test APK + Espresso Intents, invalid UDN,
+  pairing export success/failure), locked settings, wizard (all paths), SAF sink, Prefs /
+  Transfers / Ui / LogBus units. Verified locally on 2026-10-27 (JBR 21, AGP 8.7.3, emulator
+  API 37). Espresso 3.7.0 / androidx.test 1.7.0 are required on API 36+. Clicks go through
+  `performClick()` (software-rendered emulators turn injected taps into long presses).
 * Gradle: no JDK toolchain pin; the build runs on any JDK 17+ and emits Java 17 bytecode.
   `settings.gradle.kts` includes `:app` only when the directory exists and
-  `NXBACKUP_SERVER_ONLY` is unset, so the Docker build context (core + server) needs no SDK.
-* `.github/workflows/android.yml` — core + server tests, APK artifact `nxbackup-debug-apk`,
-  server zip artifact `nxbackup-server`, emulator UI tests (API 34), Docker image to GHCR.
+  `CAMBACKUP_SERVER_ONLY` is unset, so the Docker build context (core + server) needs no SDK.
+* `.github/workflows/ci.yml` — tests + gates, debug/release APK, server zip, emulator UI tests
+  (API 34) + gate, multi-arch image to GHCR (`:main`/`:latest` on main, semver on tags), GitHub
+  release with APKs + zip on `v*` tags. Modelled on the `photosort` repo's workflow.
 * `tools/container-smoke.sh` — builds the image and runs the phone API against the real container
   with exiftool + export across two volumes (this is what found the cross-filesystem move bug;
   JUnit cannot reproduce separate mounts).
