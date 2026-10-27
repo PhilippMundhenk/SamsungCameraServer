@@ -29,7 +29,7 @@ class WizardActivity : AppCompatActivity() {
         prefs = Prefs(this)
         b = ActivityWizardBinding.inflate(layoutInflater)
         setContentView(b.root)
-        Ui.edgeToEdge(b.root)
+        Ui.edgeToEdge(this, b.root, b.header)
 
         b.modeGroup.check(when (prefs.mode) { Mode.PHONE -> R.id.wizModePhone; Mode.PHONE_AND_SERVER -> R.id.wizModePhoneAndServer; Mode.SERVER -> R.id.wizModeServer })
         b.chooseFolder.setOnClickListener { pickFolder.launch(prefs.folderUri) }

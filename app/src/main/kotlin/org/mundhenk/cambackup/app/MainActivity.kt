@@ -37,7 +37,7 @@ class MainActivity : AppCompatActivity() {
         Transfers.init(this)
         b = ActivityMainBinding.inflate(layoutInflater)
         setContentView(b.root)
-        Ui.edgeToEdge(b.root)
+        Ui.edgeToEdge(this, b.root, b.toolbar)
         setSupportActionBar(b.toolbar)
         b.transfers.layoutManager = LinearLayoutManager(this)
         b.transfers.adapter = adapter

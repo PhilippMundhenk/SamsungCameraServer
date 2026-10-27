@@ -15,7 +15,7 @@ class LogActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         b = ActivityLogBinding.inflate(layoutInflater)
         setContentView(b.root)
-        Ui.edgeToEdge(b.root)
+        Ui.edgeToEdge(this, b.root, b.toolbar)
         setSupportActionBar(b.toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         b.toolbar.setNavigationOnClickListener { finish() }

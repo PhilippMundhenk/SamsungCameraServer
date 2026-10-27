@@ -92,8 +92,9 @@ class MainFlowTest {
             waitFor { LogBus.snapshot().any { l -> l.contains("Discarded duplicate SAM_0042.JPG") } }
             assertEquals(2, Transfers.list().size)
 
-            // log screen shows what happened
-            onView(withId(R.id.action_log)).perform(tap())
+            // log screen (overflow menu) shows what happened
+            openActionBarOverflowOrOptionsMenu(context)
+            onView(withText(R.string.log_label)).perform(click())
             waitForUi { onView(withId(R.id.log)).check(matches(withSubstring("Stored SAM_0042.JPG"))) }
             onView(withId(R.id.action_clear_log)).perform(tap())
             onView(withId(R.id.log)).check(matches(withText("")))

@@ -28,7 +28,7 @@ class SettingsActivity : AppCompatActivity() {
         prefs = Prefs(this)
         b = ActivitySettingsBinding.inflate(layoutInflater)
         setContentView(b.root)
-        Ui.edgeToEdge(b.root)
+        Ui.edgeToEdge(this, b.root, b.toolbar)
         setSupportActionBar(b.toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         b.toolbar.setNavigationOnClickListener { finish() }
