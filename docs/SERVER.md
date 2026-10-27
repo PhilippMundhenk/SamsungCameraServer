@@ -74,8 +74,10 @@ into the `photos` volume (`mv data/incoming/* photos/`). The ledger keeps the ol
 
 The pipeline runs per file on a worker thread, in order: EXIF time shift → RAW preview →
 rename → export. A stage whose tool is missing is skipped with a log line; the status page
-shows which tools exist. The image ships exiftool and LibRaw's `dcraw_emu`;
-`docker build --build-arg EXTRA_PACKAGES=darktable .` adds a full RAW developer.
+shows which tools exist. The image ships exiftool, RawTherapee (`rawtherapee-cli`, used for
+RAW → JPEG when `raw.convert=true`) and LibRaw's `dcraw_emu` as the small fallback;
+`docker build --build-arg EXTRA_PACKAGES=darktable .` adds darktable, which `raw.converter=auto`
+prefers when present.
 
 ## Networking
 

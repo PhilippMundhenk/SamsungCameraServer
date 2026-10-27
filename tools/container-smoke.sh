@@ -60,4 +60,13 @@ echo "ok  uploads land in /photos, state stays in /data"
 grep -q "SAM_0100.JPG	5" "$WORK/data/received.tsv" && grep -q "20240506_080809_NX1000_SAM_0100.JPG" "$WORK/data/received.tsv" || { echo "FAIL: ledger not updated"; cat "$WORK/data/received.tsv"; exit 1; }
 echo "ok  ledger follows the move"
 docker logs cambackup-smoke 2>&1 | grep -q "Shifted EXIF dates" && echo "ok  exiftool time shift ran"
+# the RAW developer and the fallback are in the image, and the status page knows it
+# rawtherapee-cli prints its banner and exits 2 on --version, so look at the output, not the
+# exit code (and keep pipefail out of it by capturing first)
+RT_OUT=$(docker run --rm --entrypoint rawtherapee-cli "$IMG" --version 2>&1 || true)
+echo "$RT_OUT" | grep -q "RawTherapee" || { echo "FAIL: rawtherapee-cli missing in the image: $RT_OUT"; exit 1; }
+docker run --rm --entrypoint sh "$IMG" -c 'command -v dcraw_emu >/dev/null' || { echo "FAIL: dcraw_emu missing in the image"; exit 1; }
+for i in $(seq 1 30); do curl -s -m 5 "http://127.0.0.1:$PORT/" | grep -q 'rawtherapee-cli &#10003;' && break; sleep 1; done
+curl -s -m 5 "http://127.0.0.1:$PORT/" | grep -q 'rawtherapee-cli &#10003;' || { echo "FAIL: status page does not show rawtherapee-cli as available"; curl -s "http://127.0.0.1:$PORT/" | grep -o 'Tools:.*</p>'; exit 1; }
+echo "ok  RAW developer (rawtherapee-cli) and dcraw_emu available in the image"
 echo "CONTAINER SMOKE PASSED"

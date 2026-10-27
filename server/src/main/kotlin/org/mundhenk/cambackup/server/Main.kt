@@ -82,7 +82,7 @@ class CamBackupServer private constructor(
             val identity = loadIdentity(config, log)
             val ledger = Ledger(File(dataDir, "received.tsv"))
             val tools = Tools(log, config.toolsPath)
-            tools.probeInBackground(listOf(config.exifTool, "darktable-cli", "rawtherapee-cli", "dcraw_emu", "dcraw"))
+            tools.probeInBackground(listOf(config.exifTool, "darktable-cli", "rawtherapee-cli", "dcraw_emu"))
             val pipeline = Pipeline(config, ledger, tools, log)
             val sink = ServerSink(config.storageDir.apply { mkdirs() }, ledger, pipeline, log)
             var statsRef: BackupServer? = null

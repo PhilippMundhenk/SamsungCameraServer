@@ -17,11 +17,12 @@ COPY server server
 RUN gradle :server:installDist --no-daemon -q -Dkotlin.compiler.execution.strategy=in-process
 
 FROM eclipse-temurin:17-jre-jammy
-# exiftool: time shift + rename metadata. libraw-bin: dcraw_emu for RAW -> JPEG previews
-# (lightweight; set EXTRA_PACKAGES=darktable or rawtherapee for a full raw developer).
+# exiftool: time shift + rename metadata. rawtherapee: the RAW developer (rawtherapee-cli, headless)
+# used for RAW -> JPEG when raw.convert is on. libraw-bin: dcraw_emu as the small fallback.
+# EXTRA_PACKAGES=darktable adds darktable-cli, which raw.converter=auto prefers when present.
 ARG EXTRA_PACKAGES=""
 RUN apt-get update \
- && apt-get install -y --no-install-recommends libimage-exiftool-perl libraw-bin ${EXTRA_PACKAGES} \
+ && apt-get install -y --no-install-recommends libimage-exiftool-perl rawtherapee libraw-bin ${EXTRA_PACKAGES} \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=build /src/server/build/install/cambackup-server /opt/cambackup
 # /data: config, identity (pairing file), ledger - small, back it up.

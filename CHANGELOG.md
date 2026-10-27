@@ -21,6 +21,10 @@ All notable changes to this project are documented here. The format follows
   switched back to.
 
 ### Changed
+- Container: RawTherapee is part of the image, so `raw.convert=true` renders JPEGs from RAW
+  files out of the box (LibRaw's `dcraw_emu` stays as the fallback, darktable via
+  `EXTRA_PACKAGES`). The image grows from about 470 MB to 870 MB for it. The status page no
+  longer lists the classic `dcraw` binary.
 - Container: received files land in a separate `/photos` volume (`CAMBACKUP_STORAGE_DIR=/photos`
   set by the image); `/data` holds only config, identity and ledger; `/export` is the optional
   export target. Move `data/incoming/*` into `photos/` when upgrading.

@@ -60,4 +60,4 @@ Espresso suite with its gate on an emulator (API 34), multi-arch image build.
 * Resumable uploads (`dlna:resumeUpload`) are announced as unsupported; the camera restarts a file
   after a dropped connection.
 * RAW conversion and EXIF stages run only where the tools are installed (the Docker image has
-  exiftool and dcraw_emu); the tests cover every stage with fake tools.
+  exiftool, RawTherapee and dcraw_emu); the tests cover every stage with fake tools.
