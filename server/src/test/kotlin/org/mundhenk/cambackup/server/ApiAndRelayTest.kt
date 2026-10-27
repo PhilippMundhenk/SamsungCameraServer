@@ -95,6 +95,28 @@ class ApiAndRelayTest {
     }
 
     @Test
+    fun troubleshootingCommands() {
+        val s = start(mapOf("NXBACKUP_SERVER_NAME" to "[PC]Sim").mapKeys { it.key.replace("NXBACKUP", "CAMBACKUP") })
+        fun run(vararg a: String): Pair<Int, String> { val bos = ByteArrayOutputStream(); val code = ServerCli.run(arrayOf(*a), PrintStream(bos, true, "UTF-8")); return code to bos.toString("UTF-8") }
+        // simulate: a full camera session against the running server
+        val (code, out) = run("simulate", "127.0.0.1", s.port.toString(), "3")
+        assertEquals(out, 0, code)
+        assertTrue(out, out.contains("Session done: server '[PC]Sim'") && out.contains("uploaded 3 of 3"))
+        s.pipeline.awaitIdle()
+        assertEquals(3, s.ledger.size())
+        assertTrue(log.any { it.startsWith("Stored SIM_0001.JPG (500000 bytes, ") && it.contains("MB/s in") })
+        // second run: everything is a duplicate, still a complete session
+        assertEquals(0, run("simulate", "127.0.0.1", s.port.toString(), "3").first)
+        assertEquals(3, s.backup.stats.filesSkipped.get())
+        // usage errors and a discovery that may or may not find something (depends on the network)
+        assertEquals(2, run("simulate").first)
+        assertEquals(2, run("bogus").first)
+        assertTrue(run("simulate").second.startsWith("usage:"))
+        val (dc, dout) = run("discover", "1")
+        assertTrue(dout, dout.startsWith("SSDP: searching") && (dc == 0 && dout.contains("Found:") || dc == 1 && dout.contains("No server answered")))
+    }
+
+    @Test
     fun unreadablePairingFileIsReplaced() {
         File(dataDir, "SAMSUNGAutoBackupDESC.ini").writeText("garbage")
         val s = start()

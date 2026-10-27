@@ -76,6 +76,26 @@ the phone talks to the server (its server modes), plain port mapping of 52235/tc
 `ssdp.enabled=false` keeps the server off the UPnP radar. HTTPS: put a reverse proxy in front
 for the phone API; the camera path must stay plain HTTP.
 
+## When the camera does not connect
+
+The camera shows the server's name as soon as the pairing file is on the card; that proves
+nothing about the network. It then searches with SSDP (`ST: urn:schemas-upnp-org:device:MediaServer:1`)
+and fetches `/DMS/SamsungDmsDesc.xml`. Watch the status page log:
+
+* `SSDP reply to <camera ip> (ST=urn:schemas-upnp-org:device:MediaServer:1)` followed by
+  `Camera <ip> fetched device description (Samsung User-Agent DLNADOC/1.50)`: discovery works;
+  the session follows (`Backup session started`, `Ready for`, `Stored ... MB/s`).
+* Replies only to Windows PCs (`Microsoft-Windows/10.0 UPnP/1.0`, `DAFUPnP`, `FDSSDP`) or Home
+  Assistant: the camera's search never arrived. Camera and server must be on the same network
+  segment (Wi-Fi SSID on the same VLAN as the container's host interface; `network_mode: host`
+  or `macvlan`). A search for something we do not answer is logged as `SSDP search from <ip>
+  for '<ST>' ignored`.
+* Test from another machine on the camera's network:
+  `docker run --rm --network host ghcr.io/philippmundhenk/cambackup-server:latest discover`
+  prints who answers, and `... simulate <server ip>` runs a complete fake camera session.
+* Transfers are slow: the `Stored` log line shows the rate. The camera's 2012 Wi-Fi delivers
+  roughly 1–2 MB/s, so a 25 MB RAW takes 15–25 s; that is the camera, not the server.
+
 ## Backend API (used by the app)
 
 ```

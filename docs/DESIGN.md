@@ -223,6 +223,13 @@ PUT bodies are accepted (the app uses them when the camera sent no size).
 
 ## 7. Open questions / first real-camera checklist
 
+**Confirmed on 2026-10-27 with a real NX1000 against the home server (Docker, host networking):**
+the camera searches with `ST: urn:schemas-upnp-org:device:MediaServer:1` (three M-SEARCHes in
+a row), takes our reply, fetches `/DMS/SamsungDmsDesc.xml` with `User-Agent: Samsung User-Agent
+DLNADOC/1.50`, and uploads. The name shown on the camera comes from the pairing file, not from
+the network. Windows PCs on the LAN also fetch the description (`Microsoft-Windows/10.0
+UPnP/1.0`, `DAFUPnP`, `FDSSDP`) and search by our uuid; harmless.
+
 1. Does the camera show a one-time "connect to this PC?" prompt? (unknown, harmless)
 2. Exact UPnP error code the camera treats as "file exists".
 3. Does the camera call `Browse` before `X_BACKUP_START` and accept our empty result?

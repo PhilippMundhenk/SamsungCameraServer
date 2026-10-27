@@ -47,8 +47,10 @@ class SsdpTest {
             // the simulator's discover() does the same thing
             val loc = CameraSimulator.discover(2000, { log += it }, loopback, port)
             assertEquals("http://127.0.0.1:51234${UpnpXml.DEVICE_DESC_PATH}", loc)
-            // ignored: other search targets, non-M-SEARCH packets, packets without ST
+            // ignored: other search targets (logged once a minute per sender), non-M-SEARCH packets, packets without ST
             assertNull(search(port, "urn:schemas-upnp-org:device:MediaRenderer:1", 700))
+            assertNull(search(port, "urn:schemas-upnp-org:device:MediaRenderer:1", 300))
+            assertEquals(1, log.count { it.contains("for 'urn:schemas-upnp-org:device:MediaRenderer:1' ignored") })
             assertNull(search(port, "ssdp:all", 700, prefix = "NOTIFY * HTTP/1.1"))
             val noSt = "M-SEARCH * HTTP/1.1\r\nMAN: \"ssdp:discover\"\r\n\r\n".toByteArray()
             DatagramSocket().use { s ->

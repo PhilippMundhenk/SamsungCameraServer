@@ -30,6 +30,7 @@ class SsdpResponder(
     private val ssdpPort: Int = SSDP_PORT,
 ) {
     private val running = AtomicBoolean(false)
+    private val ignoredSeen = java.util.concurrent.ConcurrentHashMap<String, Long>()
     private var socket: MulticastSocket? = null
     private var listener: Thread? = null
     private var announcer: Thread? = null
@@ -68,9 +69,19 @@ class SsdpResponder(
             try { sock.receive(packet) } catch (_: SocketTimeoutException) { continue } catch (e: IOException) { if (running.get()) log("ssdp recv: $e"); break }
             val text = String(packet.data, 0, packet.length, Charsets.ISO_8859_1)
             if (!text.startsWith("M-SEARCH", ignoreCase = true)) continue
-            val st = headerValue(text, "ST") ?: continue
-            if (!matches(st)) continue
             val from = packet.socketAddress as InetSocketAddress
+            val st = headerValue(text, "ST") ?: continue
+            if (!matches(st)) {
+                // Seen but not ours: logged once a minute per sender+target so a camera searching for
+                // something unexpected shows up without the log drowning in Windows/HA chatter.
+                val key = "${from.address.hostAddress}|$st"
+                val now = System.currentTimeMillis()
+                if (now - (ignoredSeen[key] ?: 0L) > IGNORED_LOG_INTERVAL_MS) {
+                    ignoredSeen[key] = now
+                    log("SSDP search from ${from.address.hostAddress} for '$st' ignored (not a MediaServer/rootdevice/our uuid)${headerValue(text, "USER-AGENT")?.let { " UA=$it" } ?: ""}")
+                }
+                continue
+            }
             val local = bindAddress ?: localAddressFor(from.address) ?: continue
             val reply = searchResponse(local.hostAddress, st)
             try {
@@ -152,6 +163,7 @@ class SsdpResponder(
 
     companion object {
         const val SSDP_PORT = 1900
+        const val IGNORED_LOG_INTERVAL_MS = 60_000L
         val GROUP: InetAddress = InetAddress.getByName("239.255.255.250")
 
         fun headerValue(message: String, name: String): String? =

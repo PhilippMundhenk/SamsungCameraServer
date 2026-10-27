@@ -1,26 +1,63 @@
 package org.mundhenk.cambackup.server
 
 import org.mundhenk.cambackup.core.BackupServer
+import org.mundhenk.cambackup.core.CameraSimulator
 import org.mundhenk.cambackup.core.PairingFile
 import org.mundhenk.cambackup.core.ServerIdentity
 import java.io.File
+import java.io.PrintStream
 
 /**
  * Self-hosted backup target.
  *
- *   cambackup-server [dataDir]      (default: $CAMBACKUP_DATA or ./data)
+ *   cambackup-server [dataDir]            run the server (default: $CAMBACKUP_DATA or ./data)
+ *   cambackup-server discover [seconds]   send an SSDP search like the camera does, print who answers
+ *   cambackup-server simulate <host> [port] [count]   act as a camera against a running target
  *
  * The data directory holds cambackup.conf, SAMSUNGAutoBackupDESC.ini (the identity),
  * received.tsv (the ledger) and, by default, incoming/<date>/<name>.
  */
 fun main(args: Array<String>) {
-    if (args.firstOrNull() in setOf("-h", "--help")) {
-        println("usage: cambackup-server [dataDir]   (env CAMBACKUP_DATA, config keys as CAMBACKUP_<KEY>)"); return
+    when (args.firstOrNull()) {
+        "-h", "--help" -> println(ServerCli.USAGE)
+        "discover", "simulate" -> kotlin.system.exitProcess(ServerCli.run(args, System.out))
+        else -> {
+            val dataDir = File(args.firstOrNull() ?: System.getenv("CAMBACKUP_DATA") ?: "data").absoluteFile
+            val server = CamBackupServer.start(dataDir)
+            Runtime.getRuntime().addShutdownHook(Thread { server.stop() })
+            Thread.currentThread().join()
+        }
     }
-    val dataDir = File(args.firstOrNull() ?: System.getenv("CAMBACKUP_DATA") ?: "data").absoluteFile
-    val server = CamBackupServer.start(dataDir)
-    Runtime.getRuntime().addShutdownHook(Thread { server.stop() })
-    Thread.currentThread().join()
+}
+
+/** Troubleshooting commands: run them from any machine on the camera's network (e.g. `docker run --network host ... discover`). */
+object ServerCli {
+    const val USAGE = "usage: cambackup-server [dataDir] | discover [seconds] | simulate <host> [port] [files]   (env CAMBACKUP_DATA, config keys as CAMBACKUP_<KEY>)"
+
+    fun run(args: Array<String>, out: PrintStream): Int = when (args.firstOrNull()) {
+        "discover" -> {
+            val seconds = args.getOrNull(1)?.toIntOrNull() ?: 3
+            out.println("SSDP: searching for MediaServers for $seconds s (this is what the camera does)...")
+            val location = CameraSimulator.discover(seconds * 1000, { out.println("  $it") })
+            if (location == null) { out.println("No server answered. Same network segment as the server? Host networking / macvlan? See docs/SERVER.md."); 1 }
+            else { out.println("Found: $location"); 0 }
+        }
+        "simulate" -> {
+            val host = args.getOrNull(1)
+            if (host == null) { out.println(USAGE); 2 } else {
+                val port = args.getOrNull(2)?.toIntOrNull() ?: BackupServer.DEFAULT_HTTP_PORT
+                val count = args.getOrNull(3)?.toIntOrNull() ?: 2
+                val rnd = java.util.Random()
+                val files = (1..count).map { i ->
+                    CameraSimulator.SimFile(String.format("SIM_%04d.JPG", i), java.time.LocalDate.now().toString(), "image/jpeg", ByteArray(500_000).also { rnd.nextBytes(it) })
+                }
+                val r = CameraSimulator(host, port) { out.println("  $it") }.runBackup(files)
+                out.println("Session done: server '${r.friendlyName}' uuid:${r.udn}, uploaded ${r.uploaded.size} of ${files.size}")
+                if (r.uploaded.size == files.size) 0 else 1
+            }
+        }
+        else -> { out.println(USAGE); 2 }
+    }
 }
 
 /** Wires config, identity, sink, pipeline, API and the UPnP server. Also used by the tests. */

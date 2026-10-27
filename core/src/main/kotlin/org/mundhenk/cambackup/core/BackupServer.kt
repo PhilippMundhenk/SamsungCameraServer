@@ -66,7 +66,7 @@ class BackupServer(
 
     private fun route(req: HttpRequest): HttpResponse = when {
         req.method == "GET" && req.path.equals(UpnpXml.DEVICE_DESC_PATH, true) -> {
-            log("Camera ${req.remoteAddress} fetched device description (${req.header("user-agent") ?: "no UA"})")
+            log("${if (req.header("user-agent")?.contains("DLNADOC", true) == true) "Camera" else "Client"} ${req.remoteAddress} fetched device description (${req.header("user-agent") ?: "no UA"})")
             HttpResponse.xml(UpnpXml.deviceDescription(identity))
         }
         req.method == "GET" && req.path.endsWith("ContentDirectory1.xml", true) -> HttpResponse.xml(UpnpXml.contentDirectoryScpd)
@@ -154,12 +154,20 @@ class BackupServer(
         }
         val effective = if (file.size < 0 && req.contentLength > 0) file.copy(size = req.contentLength) else file
         stats.lastFile = effective.name
+        val started = System.nanoTime()
         val result = sink.store(effective, req.body)
+        val seconds = (System.nanoTime() - started) / 1e9
         when (result) {
-            StoreResult.STORED -> { stats.filesStored.incrementAndGet(); stats.bytesStored.addAndGet(maxOf(effective.size, 0)); log("Stored ${effective.name} (${effective.size} bytes)") }
+            StoreResult.STORED -> { stats.filesStored.incrementAndGet(); stats.bytesStored.addAndGet(maxOf(effective.size, 0)); log("Stored ${effective.name} (${effective.size} bytes, ${rate(effective.size, seconds)})") }
             StoreResult.ALREADY_EXISTS -> { stats.filesSkipped.incrementAndGet(); log("Discarded duplicate ${effective.name}") }
         }
         return HttpResponse.empty(200)
+    }
+
+    /** "12.3 MB/s in 2.1 s" — the camera's Wi-Fi is the usual bottleneck, this makes it visible. */
+    private fun rate(bytes: Long, seconds: Double): String {
+        val s = maxOf(seconds, 0.001)
+        return String.format(java.util.Locale.US, "%.1f MB/s in %.1f s", bytes / 1e6 / s, seconds)
     }
 
     private fun parseCreateObject(soap: String, camera: String): IncomingFile {
