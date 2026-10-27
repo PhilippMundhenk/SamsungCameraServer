@@ -13,7 +13,14 @@ PORT="${PORT:-18080}"
 WORK="$(pwd -W 2>/dev/null || pwd)/build/container-smoke"
 rm -rf "$WORK"
 export MSYS_NO_PATHCONV=1   # Git Bash: do not rewrite /data style container paths
-trap 'docker rm -f cambackup-smoke >/dev/null 2>&1 || true; rm -rf "$WORK"' EXIT
+# Cleanup must never fail the run: files written by the container belong to root on Linux, so
+# delete them from inside a container when a plain rm is refused.
+cleanup() {
+  docker rm -f cambackup-smoke >/dev/null 2>&1 || true
+  rm -rf "$WORK" 2>/dev/null || docker run --rm -v "$WORK:/w" --entrypoint sh "$IMG" -c 'rm -rf /w/data /w/photos /w/export /w/in' >/dev/null 2>&1 || true
+  rm -rf "$WORK" 2>/dev/null || true
+}
+trap cleanup EXIT
 
 docker build -q -t "$IMG" . >/dev/null
 mkdir -p "$WORK/in" "$WORK/data" "$WORK/photos" "$WORK/export"
