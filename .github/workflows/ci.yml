@@ -98,7 +98,18 @@ jobs:
             adb shell input keyevent 82 || true
             adb shell input keyevent 3 || true
             adb shell settings put global hidden_api_policy 1 || true
+            adb logcat -c || true
+            mkdir -p app/build/emulator-diagnostics
+            adb exec-out screencap -p > app/build/emulator-diagnostics/before.png || true
+            set +e
             ./gradlew :app:connectedDebugAndroidTest :app:jacocoAndroidTestReport :app:jacocoAndroidTestCoverageVerification --no-daemon
+            rc=$?
+            set -e
+            # what was on screen and in focus when the run ended, plus the full logcat
+            adb exec-out screencap -p > app/build/emulator-diagnostics/after.png || true
+            adb shell dumpsys window | grep -E "mCurrentFocus|mFocusedApp" > app/build/emulator-diagnostics/focus.txt || true
+            adb logcat -d > app/build/emulator-diagnostics/logcat.txt || true
+            exit $rc
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -106,6 +117,7 @@ jobs:
           path: |
             app/build/reports/androidTests/connected
             app/build/reports/jacoco
+            app/build/emulator-diagnostics
 
   image:
     name: Server container image

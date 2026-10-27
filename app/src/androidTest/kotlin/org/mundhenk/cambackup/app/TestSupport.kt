@@ -16,8 +16,9 @@ import java.util.concurrent.CopyOnWriteArrayList
 object TestSupport {
     val context: Context get() = InstrumentationRegistry.getInstrumentation().targetContext
 
-    /** Fresh prefs + transfer list + log, service stopped. */
+    /** Fresh prefs + transfer list + log, service stopped, no system dialog in the way. */
     fun reset(mode: Mode = Mode.PHONE, setupDone: Boolean = true) {
+        clearScreen()
         if (BackupService.running) { BackupService.stop(context); waitFor { !BackupService.running } }
         context.getSharedPreferences("cambackup", Context.MODE_PRIVATE).edit().clear().commit()
         Prefs(context).apply { this.mode = mode; this.setupDone = setupDone; serverName = "[PC]UITest" }
@@ -25,6 +26,24 @@ object TestSupport {
         LogBus.clear()
         Sinks.defaultFolder(context).deleteRecursively()
         Thread.sleep(50)
+    }
+
+    /**
+     * CI emulators sometimes boot with the keyguard, an ANR dialog ("Wait" / "Close app") or a
+     * permission prompt on top; Espresso then never sees a focused window. Dismiss what is there
+     * and log the focused window so a failing run can be diagnosed from logcat.
+     */
+    fun clearScreen() {
+        val device = androidx.test.uiautomator.UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        try {
+            device.executeShellCommand("wm dismiss-keyguard")
+            device.wakeUp()
+            for (label in listOf("Wait", "Close app", "OK", "Allow", "Got it", "Don't allow")) {
+                device.findObject(androidx.test.uiautomator.By.text(label))?.let { android.util.Log.i("UITest", "dismissing '$label'"); it.click() }
+            }
+            val focus = device.executeShellCommand("dumpsys window").lineSequence().filter { "mCurrentFocus" in it || "mFocusedApp" in it }.joinToString(" | ") { it.trim() }
+            android.util.Log.i("UITest", "focus before test: $focus")
+        } catch (e: Exception) { android.util.Log.w("UITest", "clearScreen: $e") }
     }
 
     /**
