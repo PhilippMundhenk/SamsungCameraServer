@@ -33,6 +33,15 @@ Consequence: a file delivered to the phone is never offered to the home server a
 why the app has the "phone + home server" mode (upload later) and why both targets dedup by
 date + name + size on their own.
 
+## Session size: 1,000 files, newest first
+
+The manual (NX1100, p. 118) states "You can send up to 1,000 files" per Auto Backup run. The
+firmware builds the list with `select FullPath from ObjectTable where class != 0 and IsBackup
+!= 1 order by FullPath DESC`, so a session takes the **newest** files first and announces the
+count in `X_BACKUP_START` (`FileCnt`). Every uploaded file is marked `IsBackup = 1`, so running
+Auto Backup again continues with the remaining, older files; nothing is lost, it just takes
+several runs for a card with more than a thousand new files.
+
 ## A backup session
 
 The camera is always the client:

@@ -54,3 +54,6 @@ list, not the files.
   nothing else is requested.
 * Files are written as `<folder>/<camera date>/<original name>`, duplicates (same date, name
   and size) are discarded, never overwritten.
+* The camera sends at most 1,000 files per run, newest first, and remembers what it sent.
+  With more new files on the card, start Auto Backup again; the next run continues with the
+  older ones.
