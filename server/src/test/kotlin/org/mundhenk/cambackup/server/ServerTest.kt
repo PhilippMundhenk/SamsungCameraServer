@@ -70,9 +70,9 @@ class ServerTest {
         assertEquals(s.identity.udn, r.udn)
         assertEquals(listOf("SAM_0001.JPG", "SAM_0001.SRW"), r.uploaded)
         s.pipeline.awaitIdle()
-        val stored = File(s.config.storageDir, "2026-10-26/SAM_0001.JPG")
+        val stored = File(s.config.storageDir, "SAM_0001.JPG")
         assertArrayEquals(jpg, stored.readBytes())
-        assertArrayEquals(srw, File(s.config.storageDir, "2026-10-26/SAM_0001.SRW").readBytes())
+        assertArrayEquals(srw, File(s.config.storageDir, "SAM_0001.SRW").readBytes())
         assertEquals(2, s.ledger.size())
         assertTrue(File(dataDir, "received.tsv").readText().contains("SAM_0001.SRW\t1000000\t"))
 
@@ -126,8 +126,8 @@ class ServerTest {
         assertEquals(204, http("POST", "$base/events", """{"type":"done","camera":"10.0.0.5","sysOff":true}""".toByteArray(), auth).first)
         s.pipeline.awaitIdle()
 
-        assertArrayEquals(bytes, File(s.config.storageDir, "2026-10-26/SAM_0002.JPG").readBytes())
-        assertArrayEquals(bytes, File(s.config.storageDir, "2026-10-26/SAM_0003.MP4").readBytes())
+        assertArrayEquals(bytes, File(s.config.storageDir, "SAM_0002.JPG").readBytes())
+        assertArrayEquals(bytes, File(s.config.storageDir, "SAM_0003.MP4").readBytes())
         assertEquals(2, s.ledger.size())
         assertEquals(400, http("PUT", "$base/files/../SAM_0002.JPG", bytes, putHeaders).first.let { if (it == 404) 400 else it })
         val (_, json) = http("GET", "$base/status")
@@ -162,7 +162,7 @@ class ServerTest {
             val srw = File(dir, "20261025_000000_SAM_0007.SRW")
             assertTrue("exported files: ${dir.listFiles()?.map { it.name }}", jpg.isFile && srw.isFile)
             assertArrayEquals(bytes, jpg.readBytes())
-            assertFalse(File(s.config.storageDir, "2026-10-25/SAM_0007.JPG").exists())
+            assertFalse(File(s.config.storageDir, "SAM_0007.JPG").exists())
             // ledger follows the move and still deduplicates by the camera's name
             assertEquals(jpg.path, s.ledger.find("2026-10-25", "SAM_0007.JPG")!!.path)
             CameraSimulator("127.0.0.1", s.port, log).runBackup(files)

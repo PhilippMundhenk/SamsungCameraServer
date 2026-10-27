@@ -40,7 +40,7 @@ you process further and move elsewhere.
 | Volume | Contents |
 |---|---|
 | `/data` | `cambackup.conf` (configuration, written with comments on first start), `SAMSUNGAutoBackupDESC.ini` (the server identity = the pairing file), `received.tsv` (ledger of every file ever received; dedup survives renames and moves) |
-| `/photos` | what the camera sends: `/photos/<camera date>/<name>` (`storage.dir`, set to `/photos` by the image) |
+| `/photos` | what the camera sends (`storage.dir`, set to `/photos` by the image): flat by default, `/photos/<name>`; `storage.subfolder` adds year / month / day folders |
 | `/export` (optional) | where the pipeline moves finished files when `export.dir=/export` is set, under `export.subfolder` |
 
 Outside Docker, `storage.dir` defaults to `incoming` inside the data directory; relative paths
@@ -61,6 +61,7 @@ into the `photos` volume (`mv data/incoming/* photos/`). The ledger keeps the ol
 | `server.udn` | from the ini / generated | set it to the UDN shown in the app so one card works with both |
 | `ssdp.enabled` | `true` | answer camera discovery; `false` for a phone-only backend behind port mapping |
 | `storage.dir` | `incoming` (`/photos` in the image) | where uploads land |
+| `storage.subfolder` | `flat` | folders under `storage.dir` from the camera's date: `flat` (none), `day` (`{yyyy}-{MM}-{dd}`), `month` (`{yyyy}/{MM}`), `year` (`{yyyy}`), or any pattern with `{yyyy} {MM} {dd}` and `/`. A second file with the same name gets `_1`, `_2`, … |
 | `api.token` | empty | bearer token the app must send (empty = anyone on the LAN can upload) |
 | `ui.enabled` | `true` | status page and pairing download |
 | `exif.timeshift` | off | shift all EXIF dates, exiftool syntax: `+1:00`, `-0:30`, `+0:0:1 0:0:0` |
@@ -104,8 +105,9 @@ and fetches `/DMS/SamsungDmsDesc.xml`. Watch the status page log:
 * Test from another machine on the camera's network:
   `docker run --rm --network host ghcr.io/philippmundhenk/cambackup-server:latest discover`
   prints who answers, and `... simulate <server ip>` runs a complete fake camera session.
-* Transfers are slow: the `Stored` log line shows the rate. The camera's 2012 Wi-Fi delivers
-  roughly 1–2 MB/s, so a 25 MB RAW takes 15–25 s; that is the camera, not the server.
+* Transfers are slow: the `Stored` log line shows the rate. Measured with an NX1000: about
+  0.65 MB/s per file and 0.57 MB/s over a whole session (1,000 files, 3.8 GB in 1 h 52 min),
+  i.e. 4.5–5 Mbit/s end to end; that is the camera's Wi-Fi, not the server.
 
 ## Backend API (used by the app)
 

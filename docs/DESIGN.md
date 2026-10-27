@@ -228,8 +228,9 @@ the camera searches with `ST: urn:schemas-upnp-org:device:MediaServer:1` (three 
 a row), takes our reply, fetches `/DMS/SamsungDmsDesc.xml` with `User-Agent: Samsung User-Agent
 DLNADOC/1.50`, and uploads. The name shown on the camera comes from the pairing file, not from
 the network. Windows PCs on the LAN also fetch the description (`Microsoft-Windows/10.0
-UPnP/1.0`, `DAFUPnP`, `FDSSDP`) and search by our uuid; harmless. Observed rate ~0.65 MB/s
-regardless of file size (camera Wi-Fi). The camera caps a session at 1,000 files (manual p. 118;
+UPnP/1.0`, `DAFUPnP`, `FDSSDP`) and search by our uuid; harmless. Observed rate ~0.65 MB/s per
+file regardless of size and 0.57 MB/s over a full session (1,000 files, 3.8 GB, 1 h 52 min;
+camera Wi-Fi plus ~1 s per-file overhead for CreateObject and a new connection). The camera caps a session at 1,000 files (manual p. 118;
 the firmware's backup query orders `FullPath DESC`, i.e. newest first) and continues with the
 rest in the next run because uploaded files are flagged `IsBackup` on the card.
 

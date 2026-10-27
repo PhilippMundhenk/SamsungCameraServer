@@ -122,6 +122,36 @@ class ApiAndRelayTest {
         } finally { photos.deleteRecursively(); export.deleteRecursively() }
     }
 
+    /** storage.subfolder: flat by default, presets and patterns; same names never overwrite each other. */
+    @Test
+    fun storageLayoutsAndNameCollisions() {
+        val bytes = ByteArray(10) { it.toByte() }
+        fun session(s: CamBackupServer, vararg files: Pair<String, String>) =
+            CameraSimulator("127.0.0.1", s.port) { log += it }.runBackup(files.map { (name, date) -> CameraSimulator.SimFile(name, date, "image/jpeg", bytes) })
+        // default: flat; the camera's counter wrapped -> same name on another day is a new file
+        val flat = start(mapOf("CAMBACKUP_EXIF_TOOL" to "no-exiftool-here"))
+        session(flat, "SAM_0001.JPG" to "2026-10-27")
+        session(flat, "SAM_0001.JPG" to "2026-10-27")                              // true duplicate
+        val other = ByteArray(11) { it.toByte() }
+        CameraSimulator("127.0.0.1", flat.port) { log += it }.runBackup(listOf(CameraSimulator.SimFile("SAM_0001.JPG", "2025-01-01", "image/jpeg", other)))
+        flat.pipeline.awaitIdle()
+        assertArrayEquals(bytes, File(flat.config.storageDir, "SAM_0001.JPG").readBytes())
+        assertArrayEquals(other, File(flat.config.storageDir, "SAM_0001_1.JPG").readBytes())
+        assertEquals(File(flat.config.storageDir, "SAM_0001_1.JPG").path, flat.ledger.find("2025-01-01", "SAM_0001.JPG")!!.path)
+        assertEquals(2, flat.backup.stats.filesStored.get()); assertEquals(1, flat.backup.stats.filesSkipped.get())
+        assertTrue(log.any { it.contains("SAM_0001.JPG already exists with different content, storing as SAM_0001_1.JPG") })
+        assertTrue(http("GET", "http://127.0.0.1:${flat.port}/").second.contains("(flat)"))
+        // presets and a pattern
+        for ((layout, expected) in listOf("day" to "2026-10-27/A.JPG", "month" to "2026/10/A.JPG", "year" to "2026/A.JPG", "{yyyy}/{MM}/{dd}" to "2026/10/27/A.JPG", "{yyyy}-{MM}" to "2026-10/A.JPG")) {
+            val dir = File(dataDir, layout.replace(Regex("[^A-Za-z]"), "_"))
+            val s = start(mapOf("CAMBACKUP_STORAGE_SUBFOLDER" to layout, "CAMBACKUP_EXIF_TOOL" to "no-exiftool-here"), dir = dir)
+            session(s, "A.JPG" to "2026-10-27")
+            s.pipeline.awaitIdle()
+            assertTrue("$layout -> $expected", File(s.config.storageDir, expected).isFile)
+            assertTrue(http("HEAD", "http://127.0.0.1:${s.port}/api/v1/files/2026-10-27/A.JPG").first == 200)
+        }
+    }
+
     @Test
     fun troubleshootingCommands() {
         val s = start(mapOf("NXBACKUP_SERVER_NAME" to "[PC]Sim").mapKeys { it.key.replace("NXBACKUP", "CAMBACKUP") })
@@ -160,7 +190,7 @@ class ApiAndRelayTest {
         }
         assertTrue(raw, raw.startsWith("HTTP/1.1 500") && raw.contains("short upload of SHORT.JPG: 3 of 10 bytes"))
         assertEquals(0, s.ledger.size())
-        assertFalse(File(s.config.storageDir, "2026-10-27/SHORT.JPG.part").exists())
+        assertFalse(File(s.config.storageDir, "SHORT.JPG.part").exists())
         assertEquals(404, http("HEAD", "$base/api/v1/files/2026-10-27/SHORT.JPG").first)
     }
 
@@ -188,8 +218,8 @@ class ApiAndRelayTest {
             assertEquals(home.identity.udn, r.udn)
             assertEquals(listOf("SAM_0100.JPG", "SAM_0101.MP4"), r.uploaded)
             home.pipeline.awaitIdle()
-            assertArrayEquals(jpg, File(home.config.storageDir, "2026-10-27/20261027_SAM_0100.JPG").readBytes())
-            assertArrayEquals(mp4, File(home.config.storageDir, "2026-10-27/20261027_SAM_0101.MP4").readBytes())
+            assertArrayEquals(jpg, File(home.config.storageDir, "20261027_SAM_0100.JPG").readBytes())
+            assertArrayEquals(mp4, File(home.config.storageDir, "20261027_SAM_0101.MP4").readBytes())
             assertEquals(2, home.backup.stats.filesStored.get())
             assertEquals(1, home.backup.stats.sessions.get())
             assertTrue(log.any { it.contains("Backup session started (via phone 127.0.0.1, camera 127.0.0.1)") })

@@ -84,7 +84,7 @@ class CamBackupServer private constructor(
             val tools = Tools(log, config.toolsPath)
             tools.probeInBackground(listOf(config.exifTool, "darktable-cli", "rawtherapee-cli", "dcraw_emu"))
             val pipeline = Pipeline(config, ledger, tools, log)
-            val sink = ServerSink(config.storageDir.apply { mkdirs() }, ledger, pipeline, log)
+            val sink = ServerSink(config.storageDir.apply { mkdirs() }, ledger, pipeline, log, config.storageSubfolder)
             var statsRef: BackupServer? = null
             val api = Api(config, identity, sink, ledger, tools, { statsRef?.stats }, log)
             val backup = BackupServer(
@@ -93,7 +93,7 @@ class CamBackupServer private constructor(
             )
             statsRef = backup
             backup.start()
-            log("Config: ${File(dataDir, Config.FILE_NAME)} | storage: ${config.storageDir} | web UI: http://<host>:${backup.boundPort}/")
+            log("Config: ${File(dataDir, Config.FILE_NAME)} | storage: ${config.storageDir}${File.separator}${config.storageSubfolder.ifEmpty { "(flat)" }} | web UI: http://<host>:${backup.boundPort}/")
             log("Pairing file for the SD card: http://<host>:${backup.boundPort}/pairing.zip  (UDN uuid:${identity.udn})")
             if (config.apiToken == null) log("api.token is empty: the backend API accepts uploads from anyone on the network")
             return CamBackupServer(config, identity, ledger, pipeline, sink, backup)

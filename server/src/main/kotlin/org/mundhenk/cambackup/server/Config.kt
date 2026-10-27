@@ -34,6 +34,8 @@ class Config(val dataDir: File, private val props: Properties, private val env: 
     val serverUdn get() = stringOrNull("server.udn")
     val ssdpEnabled get() = bool("ssdp.enabled", true)
     val storageDir get() = file("storage.dir", File(dataDir, "incoming"))
+    /** Folder layout under storage.dir: pattern with {yyyy} {MM} {dd} and '/', or day | month | year | flat. */
+    val storageSubfolder get() = org.mundhenk.cambackup.core.Layout.normalize(stringOrNull("storage.subfolder"))
     val apiToken get() = stringOrNull("api.token")
     val uiEnabled get() = bool("ui.enabled", true)
 
@@ -58,6 +60,7 @@ class Config(val dataDir: File, private val props: Properties, private val env: 
         "http.port" to httpPort.toString(),
         "ssdp.enabled" to ssdpEnabled.toString(),
         "storage.dir" to storageDir.path,
+        "storage.subfolder" to storageSubfolder.ifEmpty { "(flat)" },
         "api.token" to if (apiToken != null) "(set)" else "(none - LAN only)",
         "exif.timeshift" to (exifTimeShift ?: "(off)"),
         "raw.convert" to if (rawConvert) rawConverter else "false",
@@ -98,8 +101,12 @@ class Config(val dataDir: File, private val props: Properties, private val env: 
             |# Answer SSDP discovery (the container must be on the camera's network: host networking or macvlan).
             |ssdp.enabled=true
             |
-            |# Where uploads land: <storage.dir>/<date>/<name>
+            |# Where uploads land: <storage.dir>/<storage.subfolder>/<name>
             |storage.dir=incoming
+            |# Folder layout under storage.dir, from the camera's date. flat (no folders, the default),
+            |# day ({yyyy}-{MM}-{dd}), month ({yyyy}/{MM}), year ({yyyy}), or any pattern with {yyyy} {MM} {dd} and '/'.
+            |# A second file with the same name gets a numbered suffix, nothing is overwritten.
+            |storage.subfolder=flat
             |
             |# Bearer token the Android app must send in backend mode (empty = no auth; LAN only!).
             |api.token=

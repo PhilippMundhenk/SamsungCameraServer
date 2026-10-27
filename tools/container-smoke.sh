@@ -54,7 +54,8 @@ for i in $(seq 1 30); do [ -f "$WORK/export/2024/2024-05-06/20240506_080809_NX10
 OUT="$WORK/export/2024/2024-05-06/20240506_080809_NX1000_SAM_0100.JPG"
 [ -f "$OUT" ] || { echo "FAIL: exported file missing"; find "$WORK/photos" "$WORK/export" -type f; docker logs cambackup-smoke; exit 1; }
 echo "ok  exported + renamed with shifted EXIF time: ${OUT#$WORK/}"
-[ ! -e "$WORK/photos/2024-05-06/SAM_0100.JPG" ] || { echo "FAIL: original still in /photos"; exit 1; }
+[ ! -e "$WORK/photos/SAM_0100.JPG" ] || { echo "FAIL: original still in /photos"; exit 1; }
+[ ! -e "$WORK/photos/2024-05-06" ] || { echo "FAIL: date folder created although the default layout is flat"; exit 1; }
 [ ! -e "$WORK/data/incoming" ] || { echo "FAIL: /data/incoming was created; uploads must land in /photos"; exit 1; }
 echo "ok  uploads land in /photos, state stays in /data"
 grep -q "SAM_0100.JPG	5" "$WORK/data/received.tsv" && grep -q "20240506_080809_NX1000_SAM_0100.JPG" "$WORK/data/received.tsv" || { echo "FAIL: ledger not updated"; cat "$WORK/data/received.tsv"; exit 1; }

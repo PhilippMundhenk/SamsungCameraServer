@@ -9,16 +9,18 @@ import java.io.InputStream
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * The home server's sink. Files land in `<storage>/<date>/<name>` (written as `.part`
+ * The home server's sink. Files land in `<storage>/<layout folder>/<name>` (written as `.part`
  * first), are recorded in the [Ledger] and handed to the [Pipeline]. Used both by the
  * UPnP path (camera talks to us directly) and the backend API (phone forwards files),
  * so dedup and post-processing are identical no matter how a file arrived.
+ * [layout] is a [org.mundhenk.cambackup.core.Layout] pattern ("" = flat).
  */
 class ServerSink(
     private val storage: File,
     private val ledger: Ledger,
     private val pipeline: Pipeline,
     private val log: (String) -> Unit,
+    private val layout: String = org.mundhenk.cambackup.core.Layout.DEFAULT,
 ) : BackupSink {
     private val sessions = ConcurrentHashMap<String, Session>()
 
@@ -42,7 +44,10 @@ class ServerSink(
             session.skipped++
             return StoreResult.ALREADY_EXISTS
         }
-        val f = target(file)
+        // a different file with the same name (the camera's counter wraps, or a flat layout):
+        // never overwrite, number the newcomer
+        val f = unique(target(file))
+        if (f.name != FileSystemSink.safeSegment(file.name)) log("${file.name} already exists with different content, storing as ${f.name}")
         f.parentFile?.mkdirs()
         val tmp = File(f.parentFile, f.name + ".part")
         var written = 0L
@@ -73,7 +78,18 @@ class ServerSink(
     }
 
     private fun target(file: IncomingFile): File =
-        File(File(storage, FileSystemSink.safeSegment(file.date)), FileSystemSink.safeSegment(file.name))
+        org.mundhenk.cambackup.core.Layout.target(storage, layout, file.date, file.name)
+
+    private fun unique(target: File): File {
+        if (!target.exists()) return target
+        val base = target.nameWithoutExtension; val ext = target.extension.let { if (it.isEmpty()) "" else ".$it" }
+        var i = 1
+        while (true) {
+            val c = File(target.parentFile, "${base}_$i$ext")
+            if (!c.exists()) return c
+            i++
+        }
+    }
 
     private fun drain(input: InputStream) {
         val buf = ByteArray(64 * 1024)

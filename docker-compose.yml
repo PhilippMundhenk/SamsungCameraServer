@@ -22,6 +22,7 @@ services:
       CAMBACKUP_SERVER_NAME: "[PC]Home"
       # CAMBACKUP_SERVER_UDN: 4a682b0b-0361-dbae-6155-xxxxxxxxxxxx   # the UDN shown in the Android app
       # CAMBACKUP_API_TOKEN: change-me                              # must match the app's backend token
+      # CAMBACKUP_STORAGE_SUBFOLDER: month      # flat (default) | day | month | year | "{yyyy}/{MM}/{dd}"
       # CAMBACKUP_EXIF_TIMESHIFT: "+1:00"
       # CAMBACKUP_RAW_CONVERT: "true"
       # CAMBACKUP_RENAME_PATTERN: "{yyyy}{MM}{dd}_{HH}{mm}{ss}_{base}.{ext}"

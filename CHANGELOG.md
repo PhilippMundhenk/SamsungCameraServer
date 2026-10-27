@@ -21,6 +21,9 @@ All notable changes to this project are documented here. The format follows
   switched back to.
 
 ### Changed
+- Server: received files are stored flat by default (`/photos/<name>`); `storage.subfolder`
+  chooses `day`, `month`, `year` or any `{yyyy} {MM} {dd}` pattern (the old layout is `day`).
+  A second file with the same name is stored with a numbered suffix instead of overwriting.
 - Container: RawTherapee is part of the image, so `raw.convert=true` renders JPEGs from RAW
   files out of the box (LibRaw's `dcraw_emu` stays as the fallback, darktable via
   `EXTRA_PACKAGES`). The image grows from about 470 MB to 870 MB for it. The status page no
