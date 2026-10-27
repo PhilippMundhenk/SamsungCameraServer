@@ -16,7 +16,7 @@ COPY server server
 # in-process Kotlin compiler: no second JVM (Kotlin daemon) inside the build container
 RUN gradle :server:installDist --no-daemon -q -Dkotlin.compiler.execution.strategy=in-process
 
-FROM eclipse-temurin:17-jre-jammy
+FROM eclipse-temurin:22-jre-jammy
 # exiftool: time shift + rename metadata. rawtherapee: the RAW developer (rawtherapee-cli, headless)
 # used for RAW -> JPEG when raw.convert is on. libraw-bin: dcraw_emu as the small fallback.
 # EXTRA_PACKAGES=darktable adds darktable-cli, which raw.converter=auto prefers when present.
