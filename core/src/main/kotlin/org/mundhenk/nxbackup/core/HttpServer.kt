@@ -219,7 +219,8 @@ class ChunkedInputStream(private val inner: InputStream) : InputStream() {
     override fun read(): Int {
         if (!nextChunk()) return -1
         val b = inner.read()
-        if (b >= 0) remainingInChunk--
+        if (b < 0) throw IOException("unexpected EOF in chunked body")
+        remainingInChunk--
         return b
     }
 
@@ -227,7 +228,8 @@ class ChunkedInputStream(private val inner: InputStream) : InputStream() {
         if (len == 0) return 0
         if (!nextChunk()) return -1
         val n = inner.read(b, off, minOf(len.toLong(), remainingInChunk).toInt())
-        if (n > 0) remainingInChunk -= n
+        if (n < 0) throw IOException("unexpected EOF in chunked body")
+        remainingInChunk -= n
         return n
     }
 }

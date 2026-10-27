@@ -4,6 +4,7 @@ import java.io.ByteArrayInputStream
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.HttpURLConnection
+import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.SocketTimeoutException
 import java.net.URL
@@ -89,14 +90,14 @@ class CameraSimulator(
 
     companion object {
         /** Send an SSDP M-SEARCH and return the LOCATION of the first MediaServer answering. */
-        fun discover(timeoutMs: Int = 3000, log: (String) -> Unit = {}): String? {
+        fun discover(timeoutMs: Int = 3000, log: (String) -> Unit = {}, host: InetAddress = SsdpResponder.GROUP, port: Int = SsdpResponder.SSDP_PORT): String? {
             val msg = listOf(
                 "M-SEARCH * HTTP/1.1", "HOST: 239.255.255.250:1900", "MAN: \"ssdp:discover\"",
                 "MX: 2", "ST: ${UpnpXml.MEDIA_SERVER_TYPE}", "", "",
             ).joinToString("\r\n").toByteArray()
             DatagramSocket().use { s ->
                 s.soTimeout = timeoutMs
-                s.send(DatagramPacket(msg, msg.size, InetSocketAddress(SsdpResponder.GROUP, SsdpResponder.SSDP_PORT)))
+                s.send(DatagramPacket(msg, msg.size, InetSocketAddress(host, port)))
                 val buf = ByteArray(2048)
                 val deadline = System.currentTimeMillis() + timeoutMs
                 while (System.currentTimeMillis() < deadline) {

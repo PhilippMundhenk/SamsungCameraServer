@@ -39,6 +39,8 @@ class Config(val dataDir: File, private val props: Properties, private val env: 
 
     val exifTimeShift get() = stringOrNull("exif.timeshift")
     val exifTool get() = string("exif.tool", "exiftool")
+    /** Extra directories searched for tools before PATH (File.pathSeparator separated). */
+    val toolsPath: List<File> get() = stringOrNull("tools.path")?.split(File.pathSeparatorChar)?.filter { it.isNotBlank() }?.map { resolve(it) } ?: emptyList()
     val rawConvert get() = bool("raw.convert", false)
     val rawConverter get() = string("raw.converter", "auto")
     val rawOnlyIfNoJpeg get() = bool("raw.onlyifnojpeg", true)
@@ -110,6 +112,8 @@ class Config(val dataDir: File, private val props: Properties, private val env: 
             |# "+0:0:1 0:0:0" (one day). Cameras of this generation have no DST handling; fix it here.
             |exif.timeshift=
             |exif.tool=exiftool
+            |# Extra directories to look for tools in, before PATH (":"-separated on Linux, ";" on Windows).
+            |tools.path=
             |
             |# Convert Samsung .SRW RAW files to a JPEG next to the RAW (<name>.jpg).
             |raw.convert=false

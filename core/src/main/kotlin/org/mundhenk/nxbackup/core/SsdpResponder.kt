@@ -26,6 +26,8 @@ class SsdpResponder(
     private val notifyIntervalMs: Long = 30_000,
     /** Restrict to one interface address (e.g. the hotspot). Null = all IPv4 interfaces. */
     private val bindAddress: InetAddress? = null,
+    /** UDP port to listen on; only tests use anything but 1900. */
+    private val ssdpPort: Int = SSDP_PORT,
 ) {
     private val running = AtomicBoolean(false)
     private var socket: MulticastSocket? = null
@@ -36,11 +38,11 @@ class SsdpResponder(
         if (running.getAndSet(true)) return
         val sock = MulticastSocket(null)
         sock.reuseAddress = true
-        sock.bind(InetSocketAddress(SSDP_PORT))
+        sock.bind(InetSocketAddress(ssdpPort))
         sock.timeToLive = 2 // matches the camera's own TTL
         var joined = 0
         for (nif in interfaces()) {
-            try { sock.joinGroup(InetSocketAddress(GROUP, SSDP_PORT), nif); joined++ } catch (e: IOException) { log("join ${nif.name} failed: ${e.message}") }
+            try { sock.joinGroup(InetSocketAddress(GROUP, ssdpPort), nif); joined++ } catch (e: IOException) { log("join ${nif.name} failed: ${e.message}") }
         }
         if (joined == 0) {
             try { sock.joinGroup(GROUP); joined++ } catch (e: IOException) { log("multicast join failed: $e") }
@@ -120,7 +122,7 @@ class SsdpResponder(
                 val (nt, usn) = usnFor(st)
                 val msg = listOf(
                     "NOTIFY * HTTP/1.1",
-                    "HOST: ${GROUP.hostAddress}:$SSDP_PORT",
+                    "HOST: ${GROUP.hostAddress}:$ssdpPort",
                     "CACHE-CONTROL: max-age=1800",
                     "LOCATION: http://${addr.hostAddress}:$httpPort${UpnpXml.DEVICE_DESC_PATH}",
                     "NT: $nt",
@@ -134,7 +136,7 @@ class SsdpResponder(
                     s.reuseAddress = true
                     s.bind(InetSocketAddress(addr, 0))
                     s.timeToLive = 2
-                    s.send(DatagramPacket(msg, msg.size, GROUP, SSDP_PORT))
+                    s.send(DatagramPacket(msg, msg.size, GROUP, ssdpPort))
                 }
             }
         }

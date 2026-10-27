@@ -44,7 +44,7 @@ class NxBackupServer private constructor(
             val config = Config.load(dataDir, env)
             val identity = loadIdentity(config, log)
             val ledger = Ledger(File(dataDir, "received.tsv"))
-            val tools = Tools(log)
+            val tools = Tools(log, config.toolsPath)
             tools.probeInBackground(listOf(config.exifTool, "darktable-cli", "rawtherapee-cli", "dcraw_emu", "dcraw"))
             val pipeline = Pipeline(config, ledger, tools, log)
             val sink = ServerSink(config.storageDir.apply { mkdirs() }, ledger, pipeline, log)

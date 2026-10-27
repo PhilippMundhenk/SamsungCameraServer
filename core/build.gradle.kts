@@ -25,3 +25,5 @@ tasks.withType<Test> {
         showStandardStreams = true
     }
 }
+
+apply(from = "../gradle/coverage.gradle.kts")

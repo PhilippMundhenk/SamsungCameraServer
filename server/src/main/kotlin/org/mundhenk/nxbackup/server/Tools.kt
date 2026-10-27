@@ -5,18 +5,33 @@ import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
-/** Runs external programs (exiftool, RAW converters, hook commands) and remembers which exist. */
-class Tools(private val log: (String) -> Unit) {
+/**
+ * Runs external programs (exiftool, RAW converters, hook commands) and remembers which exist.
+ * [searchPath]: extra directories looked at before PATH (config key tools.path; tests drop fakes there).
+ */
+class Tools(private val log: (String) -> Unit, private val searchPath: List<File> = emptyList()) {
     data class Result(val exitCode: Int, val output: String) {
         val ok get() = exitCode == 0
     }
 
     private val available = ConcurrentHashMap<String, Boolean>()
+    private val isWindows = System.getProperty("os.name").lowercase().contains("win")
+
+    /** Bare program names are resolved against [searchPath] first; anything with a path separator is used as is. */
+    fun resolve(program: String): String {
+        if (searchPath.isEmpty() || program.contains('/') || program.contains('\\')) return program
+        val candidates = if (isWindows) listOf("$program.exe", "$program.cmd", "$program.bat", program) else listOf(program)
+        for (dir in searchPath) for (c in candidates) {
+            val f = File(dir, c)
+            if (f.isFile) return f.path
+        }
+        return program
+    }
 
     /** True if [program] can be started. Probed once per name. */
     fun has(program: String): Boolean = available.getOrPut(program) {
         try {
-            val p = ProcessBuilder(program, versionFlag(program)).redirectErrorStream(true).start()
+            val p = ProcessBuilder(resolve(program), versionFlag(program)).redirectErrorStream(true).start()
             p.inputStream.use { it.readBytes() }
             p.waitFor(20, TimeUnit.SECONDS)
             true
@@ -32,7 +47,7 @@ class Tools(private val log: (String) -> Unit) {
     }
 
     fun run(vararg cmd: String, dir: File? = null, timeoutSec: Long = 600, env: Map<String, String> = emptyMap()): Result {
-        val pb = ProcessBuilder(*cmd).redirectErrorStream(true)
+        val pb = ProcessBuilder(resolve(cmd[0]), *cmd.drop(1).toTypedArray()).redirectErrorStream(true)
         if (dir != null) pb.directory(dir)
         pb.environment().putAll(env)
         val p = pb.start()
@@ -49,7 +64,6 @@ class Tools(private val log: (String) -> Unit) {
 
     /** Run a user-supplied shell command line through the platform shell. */
     fun shell(commandLine: String, env: Map<String, String>, timeoutSec: Long = 600): Result {
-        val isWindows = System.getProperty("os.name").lowercase().contains("win")
         val cmd = if (isWindows) arrayOf("cmd", "/c", commandLine) else arrayOf("/bin/sh", "-c", commandLine)
         return run(*cmd, env = env, timeoutSec = timeoutSec)
     }
