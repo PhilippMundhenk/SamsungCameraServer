@@ -40,18 +40,23 @@ object Uploader {
 
     val running: Boolean get() = busy.get()
 
-    /** Starts a background run; false when one is already running. Finishes with a log line. */
+    /**
+     * Starts a background run; false when one is already running. The summary line is logged only
+     * after [running] is false again, so a screen that refreshes on log lines sees the final state.
+     */
     fun syncInBackground(context: Context, onFinished: () -> Unit = {}): Boolean {
         if (!busy.compareAndSet(false, true)) return false
         val app = context.applicationContext
         Thread({
-            try { lastResult = sync(app) } finally { busy.set(false); onFinished() }
+            var summary = "Sync failed"
+            try { summary = sync(app, logSummary = false) } catch (e: Exception) { summary = "Sync failed: $e" }
+            finally { lastResult = summary; busy.set(false); LogBus.log(summary); onFinished() }
         }, "cambackup-upload").start()
         return true
     }
 
-    /** Synchronous variant, returns the summary line (also logged). */
-    fun sync(context: Context, mimeOf: (String) -> String = ::mimeFor): String {
+    /** Synchronous variant, returns the summary line (logged unless [logSummary] is false). */
+    fun sync(context: Context, mimeOf: (String) -> String = ::mimeFor, logSummary: Boolean = true): String {
         val prefs = Prefs(context)
         Transfers.init(context)
         val pending = Transfers.pending()
@@ -65,7 +70,7 @@ object Uploader {
                 else upload(context, prefs, backend, pending, mimeOf)
             }
         }
-        LogBus.log(summary)
+        if (logSummary) LogBus.log(summary)
         return summary
     }
 
