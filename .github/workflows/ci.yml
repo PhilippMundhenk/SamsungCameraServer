@@ -191,7 +191,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [test, ui-test, image]
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: cambackup-*
           merge-multiple: true
