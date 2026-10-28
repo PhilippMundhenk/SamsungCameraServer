@@ -93,48 +93,10 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
           # dismiss the keyguard / any "System UI isn't responding" dialog: Espresso otherwise
           # fails with RootViewWithoutFocusException before the first test runs
-          script: |
-            # the runner reports "booted" a little before adb is really usable ("device offline"):
-            # wait for a healthy device ourselves before touching it
-            adb kill-server || true; adb start-server
-            adb wait-for-device
-            for i in $(seq 1 60); do
-              state=$(adb get-state 2>/dev/null || true)
-              booted=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)
-              [ "$state" = "device" ] && [ "$booted" = "1" ] && break
-              sleep 2
-            done
-            # no keyevent 82 (MENU) here: on the launcher it opens the "Wallpaper & style" popup,
-            # which then holds window focus and fails every Espresso test
-            adb shell wm dismiss-keyguard || true
-            adb shell input keyevent 4 || true
-            adb shell input keyevent 3 || true
-            adb shell settings put global hidden_api_policy 1 || true
-            adb logcat -c || true
-            mkdir -p app/build/emulator-diagnostics
-            adb exec-out screencap -p > app/build/emulator-diagnostics/before.png || true
-            set +e
-            # an emulator that loses window focus (RootViewWithoutFocusException on the first test)
-            # is an environment failure, not a test failure: one retry after re-settling the device
-            rc=1
-            for attempt in 1 2; do
-              ./gradlew :app:connectedDebugAndroidTest :app:jacocoAndroidTestReport :app:jacocoAndroidTestCoverageVerification --no-daemon
-              rc=$?
-              [ $rc -eq 0 ] && break
-              if [ $attempt -eq 1 ] && grep -rq "RootViewWithoutFocusException" app/build/outputs/androidTest-results 2>/dev/null; then
-                echo "::warning::window focus lost on the emulator, retrying the suite once"
-                adb exec-out screencap -p > app/build/emulator-diagnostics/after-attempt1.png || true
-                adb shell wm dismiss-keyguard || true; adb shell input keyevent 4 || true; adb shell input keyevent 3 || true; sleep 10
-              else
-                break
-              fi
-            done
-            set -e
-            # what was on screen and in focus when the run ended, plus the full logcat
-            adb exec-out screencap -p > app/build/emulator-diagnostics/after.png || true
-            adb shell dumpsys window | grep -E "mCurrentFocus|mFocusedApp" > app/build/emulator-diagnostics/focus.txt || true
-            adb logcat -d > app/build/emulator-diagnostics/logcat.txt || true
-            exit $rc
+          # the runner executes `script` one line at a time, so the logic lives in a script file:
+          # wait for a healthy adb device, close the launcher popup, run the suite + gate with one
+          # retry on window-focus loss, and keep screenshots / focused window / logcat as artifacts
+          script: tools/ci-emulator-tests.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
