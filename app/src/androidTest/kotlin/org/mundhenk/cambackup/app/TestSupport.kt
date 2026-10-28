@@ -41,6 +41,10 @@ object TestSupport {
             for (label in listOf("Wait", "Close app", "OK", "Allow", "Got it", "Don't allow")) {
                 device.findObject(androidx.test.uiautomator.By.text(label))?.let { android.util.Log.i("UITest", "dismissing '$label'"); it.click() }
             }
+            // the launcher's long-press / MENU popup holds window focus until it is closed
+            for (label in listOf("Wallpaper & style", "Home settings", "Widgets")) {
+                if (device.hasObject(androidx.test.uiautomator.By.text(label))) { android.util.Log.i("UITest", "closing launcher popup '$label'"); device.pressBack(); break }
+            }
             val focus = device.executeShellCommand("dumpsys window").lineSequence().filter { "mCurrentFocus" in it || "mFocusedApp" in it }.joinToString(" | ") { it.trim() }
             android.util.Log.i("UITest", "focus before test: $focus")
         } catch (e: Exception) { android.util.Log.w("UITest", "clearScreen: $e") }
