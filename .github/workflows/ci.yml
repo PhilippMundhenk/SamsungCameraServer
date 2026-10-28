@@ -91,8 +91,6 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot-save
-          # dismiss the keyguard / any "System UI isn't responding" dialog: Espresso otherwise
-          # fails with RootViewWithoutFocusException before the first test runs
           # the runner executes `script` one line at a time, so the logic lives in a script file:
           # wait for a healthy adb device, close the launcher popup, run the suite + gate with one
           # retry on window-focus loss, and keep screenshots / focused window / logcat as artifacts
