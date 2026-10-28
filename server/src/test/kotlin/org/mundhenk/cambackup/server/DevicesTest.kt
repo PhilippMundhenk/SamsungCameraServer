@@ -132,21 +132,24 @@ class DevicesTest {
         assertEquals(400, http("POST", "$base/api/v1/identity", """{"name":"x"}""".toByteArray(), mapOf("Authorization" to "Bearer tok")).first)
         // the real thing
         val adopted = BackendSink(base, { log += it }, "tok", deviceName = "Pixel 7").pushIdentity(mine)
+        org.junit.Assert.assertNotNull(log.joinToString("\n"), adopted)
         assertEquals(mine, adopted)
         assertEquals(mine, s.identity)
-        assertEquals(s.port, s.backup.boundPort)                                                       // same port after the restart
+        assertEquals(s.port, s.backup.boundPort)                                                       // nothing was restarted, same port
         assertTrue(http("GET", "$base/api/v1/identity").second.contains(mine.udn))
         assertTrue(http("GET", "$base${org.mundhenk.cambackup.core.UpnpXml.DEVICE_DESC_PATH}").second.contains("<UDN>uuid:${mine.udn}</UDN>"))
         assertTrue(File(dataDir, "SAMSUNGAutoBackupDESC.ini").readText().contains("UDN=uuid:${mine.udn}\r\nfriendlyName=[PC]Pixel"))
         assertTrue(s.config.file.readText().contains("server.udn=${mine.udn}") && s.config.file.readText().contains("server.name=[PC]Pixel"))
         assertTrue(log.any { it.startsWith("Identity adopted from Pixel 7: [PC]Pixel uuid:${mine.udn}") })
-        // the camera talks to the new identity right away, counters survived the restart
+        // the camera talks to the new identity right away, counters are untouched
         val r = CameraSimulator("127.0.0.1", s.port) { log += it }.runBackup(listOf(CameraSimulator.SimFile("Z.JPG", "2026-10-28", "image/jpeg", ByteArray(4))))
         assertEquals(mine.udn, r.udn); assertEquals("[PC]Pixel", r.friendlyName)
         assertEquals(1, s.backup.stats.filesStored.get())
         assertTrue(http("GET", "$base/api/v1/status").second.contains("\"filesStored\":1"))                 // status follows the restarted server
-        // pushing the same identity again is a no-op; a restart keeps it
-        assertEquals(mine, BackendSink(base, { log += it }, "tok").pushIdentity(mine))
+        // pushing the same identity again is a no-op; a server restart keeps it
+        val again = BackendSink(base, { log += it }, "tok").pushIdentity(mine)
+        org.junit.Assert.assertNotNull(log.joinToString("\n"), again)
+        assertEquals(mine, again)
         assertTrue(log.any { it.contains("already in use") })
         s.stop(); servers.remove(s)
         val s2 = start(mapOf("CAMBACKUP_API_TOKEN" to "tok"))

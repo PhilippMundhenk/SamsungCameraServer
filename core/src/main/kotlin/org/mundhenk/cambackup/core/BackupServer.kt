@@ -29,7 +29,7 @@ class ServerStats {
  *   -> X_BACKUP_DONE
  */
 class BackupServer(
-    val identity: ServerIdentity,
+    identity: ServerIdentity,
     private val sink: BackupSink,
     val httpPort: Int = DEFAULT_HTTP_PORT,
     private val log: (String) -> Unit = {},
@@ -44,7 +44,11 @@ class BackupServer(
     /** Handles everything that is not part of the camera protocol (backend API, web UI). */
     private val fallback: HttpHandler? = null,
 ) {
+    /** What we advertise; see [changeIdentity]. */
+    @Volatile var identity: ServerIdentity = identity
+        private set
     val stats = ServerStats()
+    @Volatile private var started = false
     private val pending = ConcurrentHashMap<String, IncomingFile>()
     private val random = SecureRandom()
     private val http = HttpServer(httpPort, ::route, log)
@@ -54,14 +58,30 @@ class BackupServer(
 
     fun start() {
         http.start()
+        started = true
         if (enableSsdp) ssdp = SsdpResponder(identity, boundPort, log, bindAddress = bindAddress).also { it.start() }
         log("Backup server up as '${identity.friendlyName}' uuid:${identity.udn}")
     }
 
     fun stop() {
+        started = false
         ssdp?.stop(); ssdp = null
         http.stop()
         log("Backup server stopped")
+    }
+
+    /**
+     * Switches to [next] without touching the HTTP side (no port rebind, no dropped request):
+     * the device description and SSDP answer with the new UDN from now on. Only the SSDP
+     * responder is recreated, so the old uuid says goodbye and the new one announces itself.
+     */
+    @Synchronized
+    fun changeIdentity(next: ServerIdentity) {
+        if (next == identity) return
+        identity = next
+        ssdp?.stop(); ssdp = null
+        if (enableSsdp && started) ssdp = SsdpResponder(next, boundPort, log, bindAddress = bindAddress).also { it.start() }
+        log("Backup server now advertises '${next.friendlyName}' uuid:${next.udn}")
     }
 
     private fun route(req: HttpRequest): HttpResponse = when {

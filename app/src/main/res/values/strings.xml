@@ -77,7 +77,7 @@
     <string name="use_server_identity_title">Use the server\'s identity on this phone?</string>
     <string name="use_server_identity_message">This phone will advertise the server\'s UDN %1$s and name \"%2$s\". Cards paired with the server then also work with this phone. Cards paired with this phone\'s current UDN stop working until you export the pairing file again; the current UDN stays in the history.</string>
     <string name="give_server_identity_title">Give the server this phone\'s identity?</string>
-    <string name="give_server_identity_message">The server %1$s will switch to this phone\'s UDN %2$s and name \"%3$s\" and restart its camera side. Cards paired with this phone then also work with the server; cards paired with the server\'s old UDN stop working with it.</string>
+    <string name="give_server_identity_message">The server %1$s will switch to this phone\'s UDN %2$s and name \"%3$s\" and switch its camera side over. Cards paired with this phone then also work with the server; cards paired with the server\'s old UDN stop working with it.</string>
     <string name="identity_adopted">Identity taken over from the server</string>
     <string name="identity_given">Server switched to this phone\'s identity</string>
     <string name="identity_exchange_failed">Could not exchange the identity with the server (see log)</string>

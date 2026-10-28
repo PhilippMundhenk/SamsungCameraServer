@@ -30,7 +30,7 @@ the card.
 same UDN, so one SD card works at home and on the road. In the server modes, Settings (and the
 wizard's pairing step) show whether the two match and offer both directions: *Use the server's
 identity* takes the server's UDN and name onto the phone; *Give the server this identity* makes
-the server switch to the phone's (it rewrites its pairing file and restarts its camera side,
+the server switch to the phone's (it rewrites its pairing file and switches its camera side over live,
 no container restart needed). Start with whichever device you paired first. Under the UDN the
 app shows where it came from; the phone's nickname ("Name of this phone") is what the server's
 device list shows.

@@ -29,7 +29,7 @@ All notable changes to this project are documented here. The format follows
 ### Added
 - Device management (#22): the app shows whether it shares the server's identity and can take
   the server's UDN or hand its own to the server (`GET`/`POST /api/v1/identity`; the server
-  rewrites its pairing file and restarts its camera side live). The UDN history records where
+  rewrites its pairing file and switches its camera side over live, without a restart). The UDN history records where
   each identity came from; the phone has a nickname that the server's new **Devices** list
   shows next to the cameras it has seen. Cameras and phones can be named on the status page
   (`POST /devices/rename`); the name is used in the list, the log and `/api/v1/status`.

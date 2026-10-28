@@ -139,7 +139,7 @@ POST {base}/api/v1/events  {"type":"start"|"done","camera":"<ip>","sysOff":true|
 GET  {base}/api/v1/status  JSON   ·   GET {base}/api/v1/log   ·   GET {base}/health
 GET  {base}/api/v1/identity                               {"udn","name","mac"} (public, what the app imports)
 POST {base}/api/v1/identity  {"udn","name"}               server adopts the identity: config file, pairing file,
-                                                          UPnP side restarted on the same port (token required)
+                                                          UPnP side switched over live (token required)
 ```
 
 Every request from the app carries `X-NX-Device: <phone nickname>`; the status page lists the

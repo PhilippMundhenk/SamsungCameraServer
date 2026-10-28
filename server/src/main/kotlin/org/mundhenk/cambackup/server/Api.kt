@@ -154,7 +154,7 @@ class Api(
 
     private fun identityJson(id: ServerIdentity) = "{\"udn\":" + Json.str(id.udn) + ",\"name\":" + Json.str(id.friendlyName) + ",\"mac\":" + Json.str(id.macAddr) + "}"
 
-    /** The phone hands its identity over so one pairing file works for both; the server restarts its UPnP side with it. */
+    /** The phone hands its identity over so one pairing file works for both; the server switches its UPnP side over to it live. */
     private fun adoptIdentity(req: HttpRequest): HttpResponse {
         val body = req.readBodyText()
         val udn = Json.field(body, "udn")?.removePrefix("uuid:")?.lowercase() ?: return HttpResponse(400, "missing udn".toByteArray(), "text/plain")

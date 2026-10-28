@@ -102,6 +102,29 @@ class BackupServerTest {
         assertEquals(500, soap("GetCurrentConnectionInfo", "", cms, ctl).first)
     }
 
+    /** An identity change (phone hands its UDN over) must not restart the HTTP side: the request that asks for it is still being answered. */
+    @Test
+    fun identityIsSwitchedLiveWithoutRestartingHttp() {
+        val port = server.boundPort
+        assertTrue(http("GET", UpnpXml.DEVICE_DESC_PATH).second.contains("<UDN>uuid:${identity.udn}</UDN>"))
+        val other = ServerIdentity("4a682b0b-0361-dbae-6155-00000000beef", "[PC]Other", ServerIdentity.DEFAULT_MAC)
+        server.changeIdentity(other)
+        server.changeIdentity(other)                                   // no-op the second time
+        assertEquals(other, server.identity)
+        assertEquals(port, server.boundPort)
+        val desc = http("GET", UpnpXml.DEVICE_DESC_PATH).second
+        assertTrue(desc, desc.contains("<UDN>uuid:${other.udn}</UDN>") && desc.contains("<friendlyName>[PC]Other</friendlyName>"))
+        assertEquals(1, log.count { it == "Backup server now advertises '[PC]Other' uuid:${other.udn}" })
+        // the event subscription id follows too, and the session counters survive
+        soap("X_BACKUP_START", "<UDN>uuid:${other.udn}</UDN><FileCnt>1</FileCnt><SysOff>0</SysOff>")
+        assertEquals(1, server.stats.sessions.get())
+        val raw = java.net.Socket("127.0.0.1", server.boundPort).use { s ->
+            s.getOutputStream().write("SUBSCRIBE /upnp/event/ContentDirectory1 HTTP/1.1\r\nHost: x\r\n\r\n".toByteArray())
+            s.getInputStream().readBytes().toString(Charsets.ISO_8859_1)
+        }
+        assertTrue(raw, raw.contains("SID: uuid:${other.udn}-sub"))
+    }
+
     /** The camera's announced file count is the first thing to look at when it sends nothing. */
     @Test
     fun sessionStartLogsTheAnnouncedFileCount() {

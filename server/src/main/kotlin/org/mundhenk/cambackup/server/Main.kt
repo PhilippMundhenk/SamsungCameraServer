@@ -71,12 +71,10 @@ class CamBackupServer private constructor(
     val devices: Devices,
     private val api: Api,
     private val log: (String) -> Unit,
-    private val backupRef: java.util.concurrent.atomic.AtomicReference<BackupServer>,
 ) {
     @Volatile var identity: ServerIdentity = identity
         private set
-    @Volatile var backup: BackupServer = backup
-        private set
+    val backup: BackupServer = backup
     val port: Int get() = backup.boundPort
 
     fun stop() {
@@ -85,23 +83,16 @@ class CamBackupServer private constructor(
     }
 
     /**
-     * Switches to [wanted] at runtime: config file (server.udn / server.name), pairing file, and a
-     * restarted UPnP server on the same port so the camera sees the new UDN immediately.
+     * Switches to [wanted] at runtime: config file (server.udn / server.name), pairing file, and
+     * the UPnP side (description + SSDP) so the camera sees the new UDN immediately. The HTTP
+     * server keeps running: this is called from inside a request, which must still be answered.
      */
     @Synchronized
     fun applyIdentity(wanted: ServerIdentity): ServerIdentity {
         config.save(mapOf("server.udn" to wanted.udn, "server.name" to wanted.friendlyName))
         val effective = loadIdentity(config, log)      // honours environment overrides and rewrites the .ini
         if (effective == identity) return identity
-        val port = backup.boundPort
-        val stats = backup.stats
-        backup.stop()
-        val next = BackupServer(effective, sink, httpPort = port, log = log, enableSsdp = config.ssdpEnabled, fallback = api)
-        next.stats.filesStored.set(stats.filesStored.get()); next.stats.filesSkipped.set(stats.filesSkipped.get())
-        next.stats.bytesStored.set(stats.bytesStored.get()); next.stats.sessions.set(stats.sessions.get())
-        next.start()
-        backup = next
-        backupRef.set(next)
+        backup.changeIdentity(effective)
         identity = effective
         api.identity = effective
         log("Identity changed to ${effective.friendlyName} uuid:${effective.udn}; pairing file rewritten, export it to the SD cards again")
@@ -129,7 +120,7 @@ class CamBackupServer private constructor(
             log("Config: ${File(dataDir, Config.FILE_NAME)} | storage: ${config.storageDir}${File.separator}${config.storageSubfolder.ifEmpty { "(flat)" }} | web UI: http://<host>:${backup.boundPort}/")
             log("Pairing file for the SD card: http://<host>:${backup.boundPort}/pairing.zip  (UDN uuid:${identity.udn})")
             if (config.apiToken == null) log("api.token is empty: the backend API accepts uploads from anyone on the network")
-            return CamBackupServer(config, identity, ledger, pipeline, sink, backup, devices, api, log, backupRef).also { server ->
+            return CamBackupServer(config, identity, ledger, pipeline, sink, backup, devices, api, log).also { server ->
                 api.onIdentityChange = { wanted -> server.applyIdentity(wanted) }
             }
         }
