@@ -105,6 +105,11 @@ for the phone API; the camera path must stay plain HTTP.
 
 ## When the camera does not connect
 
+The first thing to check is the `Backup session started by <ip>: N file(s) announced` line:
+the camera says how many files it will send. `0 files announced` means every file on its card
+is already flagged as backed up (the flag is per file, not per target: what the phone received
+under the same UDN is not offered to the server again, and vice versa).
+
 The camera shows the server's name as soon as the pairing file is on the card; that proves
 nothing about the network. It then searches with SSDP (`ST: urn:schemas-upnp-org:device:MediaServer:1`)
 and fetches `/DMS/SamsungDmsDesc.xml`. Watch the status page log:

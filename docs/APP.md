@@ -43,7 +43,9 @@ which makes the cards that still carry it work again.
 ## Daily use
 
 1. **Start server** on the main screen. A notification shows while it runs (needed to keep
-   Wi-Fi and multicast awake).
+   Wi-Fi and multicast awake). Away from home, tap **Hotspot** next to it first: Android lets
+   no app switch the hotspot on itself, so the button opens the phone's hotspot settings where
+   you flip the switch; then connect the camera to the hotspot.
 2. On the camera: Wi-Fi mode → *Auto Backup* (NX cameras: the Smart Link button can be mapped
    to it), connect to the phone's hotspot or the shared Wi-Fi. The camera lists the server by
    its name and uploads everything it has not backed up yet.
@@ -58,7 +60,14 @@ list, not the files.
 ## Notes
 
 * Phone and camera must be on the same network segment (SSDP multicast). The hotspot works on
-  stock Android; some vendor ROMs block multicast on the hotspot interface.
+  stock Android; some vendor ROMs block multicast on the hotspot interface. Switching the
+  hotspot on after the server started is fine: the app joins the new network within a few
+  seconds (log: `SSDP now also listening on …`).
+* The camera shows its transfer screen but sends nothing: look at the `Backup session started
+  by …` line in the log. The camera announces how many files it will send; `0 files announced`
+  means every file on the card is already flagged as backed up. The camera keeps that flag per
+  file, not per target, so what the home server already received under the same UDN is not
+  offered to the phone again (and the other way round).
 * The app asks for the notification permission (Android 13+) to show the running notification;
   nothing else is requested.
 * Files are written as `<folder>/<camera date>/<original name>`, duplicates (same date, name

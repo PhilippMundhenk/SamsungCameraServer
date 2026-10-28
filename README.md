@@ -31,8 +31,9 @@ One pairing file on the SD card serves both.
    name the camera will show.
 3. **Export pairing file** (wizard or Settings) and unzip the file into the root of the camera's
    SD card.
-4. Tap **Start server**. On the camera: Wi-Fi → *Auto Backup*, connect to the phone's hotspot
-   or the same Wi-Fi. The camera uploads everything it has not backed up yet.
+4. Tap **Start server** (on the road: **Hotspot** first, it opens the phone's hotspot
+   settings). On the camera: Wi-Fi → *Auto Backup*, connect to the phone's hotspot or the same
+   Wi-Fi. The camera uploads everything it has not backed up yet.
 5. Watch the list: ✓ = on the phone, ✓✓ = on the home server.
 
 Details, modes and tips: [docs/APP.md](docs/APP.md).

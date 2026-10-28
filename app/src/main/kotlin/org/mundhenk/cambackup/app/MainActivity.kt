@@ -55,6 +55,7 @@ class MainActivity : AppCompatActivity() {
             showStatus()
         }
         b.openSettings.setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
+        b.hotspot.setOnClickListener { Hotspot.openSettings(this) }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED

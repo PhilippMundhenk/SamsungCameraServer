@@ -113,6 +113,30 @@ class MainFlowTest {
         }
     }
 
+    /** The hotspot cannot be switched on by an app; the button opens the system's hotspot screen. */
+    @Test
+    fun hotspotButtonOpensTheSystemHotspotSettings() {
+        androidx.test.espresso.intent.Intents.init()
+        try {
+            // do not really leave the app: answer every external intent
+            androidx.test.espresso.intent.Intents.intending(org.hamcrest.CoreMatchers.not(androidx.test.espresso.intent.matcher.IntentMatchers.isInternal()))
+                .respondWith(android.app.Instrumentation.ActivityResult(android.app.Activity.RESULT_OK, null))
+            ActivityScenario.launch(MainActivity::class.java).use {
+                waitForUi { onView(withId(R.id.hotspot)).check(matches(isDisplayed())) }
+                onView(withId(R.id.hotspot)).perform(tap())
+                waitFor {
+                    androidx.test.espresso.intent.Intents.getIntents().any { fired ->
+                        Hotspot.candidates().any { c -> (c.component != null && c.component == fired.component) || (c.action != null && c.action == fired.action) }
+                    }
+                }
+                waitFor { LogBus.snapshot().any { it.contains("Opening the hotspot settings") } }
+            }
+        } finally { androidx.test.espresso.intent.Intents.release() }
+        // a phone without any such screen: the log says what to do instead
+        assertTrue(!Hotspot.openSettings(context) { false })
+        assertTrue(LogBus.snapshot().any { it.contains("no hotspot settings screen") })
+    }
+
     @Test
     fun startFailsWhenThePortIsTaken() {
         ServerSocket(BackupServer.DEFAULT_HTTP_PORT).use {

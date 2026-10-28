@@ -76,11 +76,50 @@ class SsdpTest {
         } finally { r.stop() }
     }
 
+    /**
+     * The phone's hotspot usually comes up after the server started: the group must be joined on
+     * the new interface (and joined again after it went away and came back), without a restart.
+     */
+    @Test
+    fun interfacesThatAppearLaterAreJoined() {
+        val real = java.net.NetworkInterface.getNetworkInterfaces()?.toList().orEmpty()
+            .filter { it.isUp && !it.isLoopback && it.supportsMulticast() && it.inetAddresses.toList().any { a -> a is java.net.Inet4Address } }
+        org.junit.Assume.assumeTrue("needs a multicast-capable IPv4 interface", real.isNotEmpty())
+        val port = freeUdpPort()
+        val log = CopyOnWriteArrayList<String>()
+        val hotspotUp = java.util.concurrent.atomic.AtomicBoolean(false)
+        val r = SsdpResponder(identity, 51234, { log += it }, notifyIntervalMs = 60_000, ssdpPort = port,
+            interfaceSource = { if (hotspotUp.get()) real else emptyList() })
+        r.start()
+        try {
+            assertTrue(log.toString(), log.any { it.startsWith("SSDP listening (0 interface(s))") })
+            hotspotUp.set(true)
+            waitFor(log) { log.any { it.startsWith("SSDP now also listening on ") } }
+            val name = log.first { it.startsWith("SSDP now also listening on ") }.removePrefix("SSDP now also listening on ").substringBefore(" (")
+            hotspotUp.set(false)
+            waitFor(log) { log.any { it == "SSDP: interface $name went away" } }
+            hotspotUp.set(true)
+            waitFor(log) { log.count { it.startsWith("SSDP now also listening on $name (") } == 2 }
+            // searches are still answered meanwhile
+            assertNotNull(search(port, UpnpXml.MEDIA_SERVER_TYPE))
+        } finally { r.stop() }
+    }
+
+    private fun waitFor(log: List<String>, timeoutMs: Long = 2 * SsdpResponder.INTERFACE_CHECK_MS + 3000, condition: () -> Boolean) {
+        val end = System.currentTimeMillis() + timeoutMs
+        while (!condition()) { if (System.currentTimeMillis() > end) throw AssertionError("condition not met in time; log=$log"); Thread.sleep(50) }
+    }
+
     @Test
     fun helpers() {
         assertEquals("http://x/y", SsdpResponder.headerValue("HTTP/1.1 200 OK\r\nlocation: http://x/y\r\nST: a", "LOCATION"))
         assertNull(SsdpResponder.headerValue("HTTP/1.1 200 OK\r\n", "LOCATION"))
         assertEquals(loopback.hostAddress, SsdpResponder.localAddressFor(loopback)?.hostAddress)
+        // the subnet fallback for the reply address: 127.0.0.5 is on the loopback interface's /8, 10.99.99.99 is not
+        val lo = java.net.NetworkInterface.getByInetAddress(loopback)
+        assertEquals(loopback, SsdpResponder.addressOnSameNetwork(InetAddress.getByName("127.0.0.5"), listOf(lo)))
+        assertNull(SsdpResponder.addressOnSameNetwork(InetAddress.getByName("10.99.99.99"), listOf(lo)))
+        assertNull(SsdpResponder.addressOnSameNetwork(InetAddress.getByName("::1"), listOf(lo)))
         assertEquals(1900, SsdpResponder.SSDP_PORT)
         assertEquals("239.255.255.250", SsdpResponder.GROUP.hostAddress)
         assertNull(CameraSimulator.discover(300, {}, loopback, freeUdpPort()))

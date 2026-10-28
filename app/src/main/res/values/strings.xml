@@ -6,12 +6,16 @@
 
     <!-- main screen -->
     <string name="status_stopped">Stopped</string>
-    <string name="status_stopped_hint">Start the server, then choose Auto Backup on the camera.</string>
+    <string name="status_stopped_hint">Start the server, then choose Auto Backup on the camera. Away from home, turn the hotspot on first and connect the camera to it.</string>
     <string name="status_running">Running</string>
     <string name="status_running_hint">Waiting for the camera: Wi-Fi → Auto Backup (or Smart Link).</string>
     <string name="start">Start server</string>
     <string name="stop">Stop server</string>
     <string name="sync_now">Sync to server</string>
+    <string name="hotspot">Hotspot</string>
+    <string name="hotspot_description">Open the hotspot settings</string>
+    <string name="hotspot_opening">Opening the hotspot settings: turn the hotspot on, then connect the camera to it. (Android lets only the system settings switch it on.)</string>
+    <string name="hotspot_no_settings">This phone has no hotspot settings screen the app can open; turn the hotspot on from the quick settings.</string>
     <string name="sync_now_pending">Sync to server (%1$d waiting)</string>
     <string name="sync_running">Syncing…</string>
     <string name="sync_already_running">Sync is already running</string>

@@ -16,6 +16,12 @@ All notable changes to this project are documented here. The format follows
   JVM relay end-to-end camera → phone → home server. (#1)
 - CI: release APK, multi-arch image on GHCR, GitHub release on `v*` tags. (#7)
 - Server: `tools.path` to find exiftool / RAW converters outside `PATH`.
+- Android: a **Hotspot** button next to *Start server* opens the phone's hotspot settings
+  (Android lets no app switch the hotspot on directly).
+- SSDP: networks that come up after the start (the phone's hotspot) are joined within a few
+  seconds, NOTIFYs go out per interface with that interface's address, and a search from a
+  network the OS has no route for is answered with the address on the same subnet. The session
+  start logs the number of files the camera announced, with a hint when it is 0.
 - Android: generating a new UDN asks for confirmation and explains that cameras paired with
   the old one stop syncing; replaced UDNs are kept in a history in Settings and can be
   switched back to.

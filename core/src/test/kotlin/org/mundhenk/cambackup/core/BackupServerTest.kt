@@ -102,6 +102,19 @@ class BackupServerTest {
         assertEquals(500, soap("GetCurrentConnectionInfo", "", cms, ctl).first)
     }
 
+    /** The camera's announced file count is the first thing to look at when it sends nothing. */
+    @Test
+    fun sessionStartLogsTheAnnouncedFileCount() {
+        soap("X_BACKUP_START", "<UDN>uuid:${identity.udn}</UDN><FileCnt>3</FileCnt><SysOff>0</SysOff>")
+        assertTrue(log.toString(), log.any { it == "Backup session started by 127.0.0.1: 3 file(s) announced" })
+        soap("X_BACKUP_START", "<UDN>uuid:${identity.udn}</UDN><FileCnt> 0 </FileCnt><SysOff>0</SysOff>")
+        assertTrue(log.toString(), log.any { it.startsWith("Backup session started by 127.0.0.1: 0 files announced, the camera has nothing new to send") })
+        soap("X_BACKUP_START", "<UDN>uuid:${identity.udn}</UDN>")
+        assertTrue(log.toString(), log.any { it == "Backup session started by 127.0.0.1" })
+        assertEquals(3, server.stats.sessions.get())
+        assertEquals(listOf("start", "start", "start"), sink.events)
+    }
+
     @Test
     fun createObjectValidationAndDuplicates() {
         // start/done bookkeeping with SysOff

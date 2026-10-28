@@ -89,7 +89,14 @@ class BackupServer(
         return when (action) {
             "X_BACKUP_START" -> {
                 stats.sessions.incrementAndGet(); stats.lastCamera = req.remoteAddress
-                log("Backup session started by ${req.remoteAddress}")
+                // FileCnt is what the camera intends to send: files not yet flagged as backed up on its
+                // card. 0 means the camera will sit on its transfer screen and send nothing.
+                val announced = Regex("<FileCnt>\\s*(\\d+)\\s*</FileCnt>").find(bodyText)?.groupValues?.get(1)?.toIntOrNull()
+                log("Backup session started by ${req.remoteAddress}" + when (announced) {
+                    null -> ""
+                    0 -> ": 0 files announced, the camera has nothing new to send (every file on the card is already flagged as backed up; a file sent to any target with this UDN is not offered again)"
+                    else -> ": $announced file(s) announced"
+                })
                 sink.onBackupStart(req.remoteAddress)
                 HttpResponse.xml(UpnpXml.soapResponse(action, cds, ""))
             }

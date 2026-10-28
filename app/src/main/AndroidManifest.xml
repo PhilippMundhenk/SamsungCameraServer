@@ -10,6 +10,14 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- the Hotspot button needs to see the system settings (package visibility, Android 11+) -->
+    <queries>
+        <package android:name="com.android.settings" />
+        <intent>
+            <action android:name="android.settings.WIRELESS_SETTINGS" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
