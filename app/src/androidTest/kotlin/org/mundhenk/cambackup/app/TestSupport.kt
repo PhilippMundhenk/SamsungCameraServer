@@ -37,6 +37,7 @@ object TestSupport {
         val device = androidx.test.uiautomator.UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
         try {
             device.executeShellCommand("wm dismiss-keyguard")
+            device.executeShellCommand("settings put global hide_error_dialogs 1")   // the launcher's ANR dialog steals focus
             device.wakeUp()
             for (label in listOf("Wait", "Close app", "OK", "Allow", "Got it", "Don't allow")) {
                 device.findObject(androidx.test.uiautomator.By.text(label))?.let { android.util.Log.i("UITest", "dismissing '$label'"); it.click() }

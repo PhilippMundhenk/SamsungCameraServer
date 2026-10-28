@@ -26,7 +26,13 @@ settle() {
   adb shell input keyevent 3 || true
 }
 settle
+# The software-rendered launcher ANRs under load and its "Application Not Responding" dialog
+# takes window focus away from the app under test; hide crash/ANR dialogs system-wide (what
+# the CTS runners do) and give the launcher a moment to finish its first draw.
+adb shell settings put global hide_error_dialogs 1 || true
+adb shell settings put secure show_first_crash_dialog 0 || true
 adb shell settings put global hidden_api_policy 1 || true
+sleep 15
 adb logcat -c || true
 adb exec-out screencap -p > "$DIAG/before.png" || true
 
