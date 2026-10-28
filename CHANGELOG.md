@@ -20,6 +20,12 @@ All notable changes to this project are documented here. The format follows
   the old one stop syncing; replaced UDNs are kept in a history in Settings and can be
   switched back to.
 
+### Added
+- Server: a settings page at `/settings` edits `cambackup.conf` from the browser (environment
+  values read-only with a badge and a "copy into the file" button, restart markers, protected
+  by `api.token` as HTTP Basic password). The status page now shows the same status card as the
+  app and links to the settings instead of listing them.
+
 ### Changed
 - Server: received files are stored flat by default (`/photos/<name>`); `storage.subfolder`
   chooses `day`, `month`, `year` or any `{yyyy} {MM} {dd}` pattern (the old layout is `day`).

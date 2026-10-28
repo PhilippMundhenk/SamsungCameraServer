@@ -20,7 +20,7 @@ class ServerSink(
     private val ledger: Ledger,
     private val pipeline: Pipeline,
     private val log: (String) -> Unit,
-    private val layout: String = org.mundhenk.cambackup.core.Layout.DEFAULT,
+    private val layout: () -> String = { org.mundhenk.cambackup.core.Layout.DEFAULT },
 ) : BackupSink {
     private val sessions = ConcurrentHashMap<String, Session>()
 
@@ -78,7 +78,7 @@ class ServerSink(
     }
 
     private fun target(file: IncomingFile): File =
-        org.mundhenk.cambackup.core.Layout.target(storage, layout, file.date, file.name)
+        org.mundhenk.cambackup.core.Layout.target(storage, layout(), file.date, file.name)
 
     private fun unique(target: File): File {
         if (!target.exists()) return target

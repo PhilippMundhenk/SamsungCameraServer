@@ -67,7 +67,7 @@ class ApiAndRelayTest {
         assertEquals(404, http("PUT", "$base/").first)
         s.pipeline.awaitIdle()
         // the status page lists probed tools once the background probe has run
-        TestSupport.waitFor { http("GET", "$base/").second.contains("Tools:") }
+        TestSupport.waitFor { http("GET", "$base/").second.contains("<h2>Tools</h2>") }
         val (_, json) = http("GET", "$base/api/v1/status")
         assertTrue(json, json.contains("\"totalFiles\":2") && json.contains("\"recent\":[{\"date\":\"2026-10-27\",\"name\":\"B.JPG\""))
     }
@@ -83,7 +83,7 @@ class ApiAndRelayTest {
         // direct render with nothing received yet and no stats
         val page = StatusPage.render(Api.StatusModel(s.identity, 1, java.time.Duration.ofMinutes(61), null, 0, emptyList(), emptyMap(), emptyList(), emptyMap(), listOf("<l>"), "/d"))
         assertTrue(page.contains("Nothing received yet") && page.contains("up 1h 1m") && page.contains("&lt;l&gt;"))
-        assertFalse(page.contains("Tools:"))
+        assertFalse(page.contains("<h2>Tools</h2>"))
         // server log default + main --help
         val s2 = start(dir = File(dataDir, "second"), log = ServerLog::log)
         assertTrue(ServerLog.snapshot().any { it.contains("api.token is empty") })

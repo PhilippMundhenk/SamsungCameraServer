@@ -60,7 +60,8 @@ docker compose up -d
 
 Open `http://<host>:52235/`, download the **pairing zip**, unzip it into the SD card root.
 On the camera: Wi-Fi → *Auto Backup*. Every option (time shift, RAW previews, renaming,
-export into a Synology Drive share, webhooks) is explained in [docs/SERVER.md](docs/SERVER.md).
+export into a Synology Drive share, webhooks) can be changed on the **Settings** page of the
+web UI and is explained in [docs/SERVER.md](docs/SERVER.md).
 
 ## Screenshots
 

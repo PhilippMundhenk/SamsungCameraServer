@@ -55,9 +55,10 @@ object TestSupport {
         return Config(dataDir, p, env)
     }
 
-    fun http(method: String, url: String, body: ByteArray? = null, headers: Map<String, String> = emptyMap(), chunked: Boolean = false): Pair<Int, String> {
+    fun http(method: String, url: String, body: ByteArray? = null, headers: Map<String, String> = emptyMap(), chunked: Boolean = false, followRedirects: Boolean = true): Pair<Int, String> {
         val c = URL(url).openConnection() as HttpURLConnection
         c.requestMethod = method
+        c.instanceFollowRedirects = followRedirects
         headers.forEach { (k, v) -> c.setRequestProperty(k, v) }
         if (body != null) {
             c.doOutput = true

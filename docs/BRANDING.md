@@ -52,7 +52,9 @@ Web CSS variables map 1:1: `--accent`=primary, `--bg`=surface, `--card`=surface_
 ## 4. Components
 
 * **Brand bar** — primary background, `on_primary` text, product name left. Android:
-  `Widget.CamBackup.Toolbar`; web: `<header>`.
+  `Widget.CamBackup.Toolbar`; web: `<header>` with the page navigation (Status, Settings,
+  JSON) on the right. Every web page uses the same chrome (`Html.head/header/footer` in the
+  server) and honours `?scheme=light|dark` to force a colour scheme (screenshots use it).
 * **Status card / tiles** — `surface_container` fill, 1 px `outline` border, 12 px (Android) /
   8 px (web) radius, 16 px padding. The big number or state first, the label under it in muted.
 * **Running indicator** — 12 px dot: `ok` when the server runs, muted when stopped.

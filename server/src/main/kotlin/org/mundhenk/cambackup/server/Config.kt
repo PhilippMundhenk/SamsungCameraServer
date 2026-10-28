@@ -7,16 +7,35 @@ import java.util.Properties
  * Server configuration: `<dataDir>/cambackup.conf` (Java properties). Every key can be
  * overridden by an environment variable `CAMBACKUP_<KEY>` (dots replaced by underscores,
  * upper-cased, e.g. `CAMBACKUP_EXIF_TIMESHIFT`). A commented default file is written on
- * first start so the data volume documents itself.
+ * first start so the data volume documents itself. The web UI's settings page edits the file
+ * through [save]; the environment always wins over the file.
  */
 class Config(val dataDir: File, private val props: Properties, private val env: Map<String, String> = System.getenv()) {
 
+    enum class Source { ENVIRONMENT, FILE, DEFAULT }
+
+    val file: File get() = File(dataDir, FILE_NAME)
+
+    private fun envKey(key: String) = "CAMBACKUP_" + key.uppercase().replace('.', '_')
+
     operator fun get(key: String): String? {
-        val envKey = "CAMBACKUP_" + key.uppercase().replace('.', '_')
-        val fromEnv = env[envKey]?.trim()
+        val fromEnv = env[envKey(key)]?.trim()
         if (!fromEnv.isNullOrEmpty()) return fromEnv
-        return props.getProperty(key)?.trim()?.takeIf { it.isNotEmpty() }
+        return synchronized(props) { props.getProperty(key)?.trim()?.takeIf { it.isNotEmpty() } }
     }
+
+    /** Where the effective value of [key] comes from. */
+    fun source(key: String): Source = when {
+        !env[envKey(key)].isNullOrBlank() -> Source.ENVIRONMENT
+        !synchronized(props) { props.getProperty(key) }.isNullOrBlank() -> Source.FILE
+        else -> Source.DEFAULT
+    }
+
+    /** The value in the file only (what the settings page edits), null when unset there. */
+    fun fileValue(key: String): String? = synchronized(props) { props.getProperty(key)?.trim()?.takeIf { it.isNotEmpty() } }
+
+    /** The environment override for [key], if any. */
+    fun envValue(key: String): String? = env[envKey(key)]?.trim()?.takeIf { it.isNotEmpty() }
 
     fun string(key: String, default: String): String = this[key] ?: default
     fun stringOrNull(key: String): String? = this[key]
@@ -38,6 +57,8 @@ class Config(val dataDir: File, private val props: Properties, private val env: 
     val storageSubfolder get() = org.mundhenk.cambackup.core.Layout.normalize(stringOrNull("storage.subfolder"))
     val apiToken get() = stringOrNull("api.token")
     val uiEnabled get() = bool("ui.enabled", true)
+    /** The settings page at /settings (protected by api.token when one is set). */
+    val uiSettings get() = bool("ui.settings", true)
 
     val exifTimeShift get() = stringOrNull("exif.timeshift")
     val exifTool get() = string("exif.tool", "exiftool")
@@ -71,6 +92,41 @@ class Config(val dataDir: File, private val props: Properties, private val env: 
         "sysoff.command" to (sysOffCommand ?: "(off)"),
     )
 
+    /**
+     * Writes [updates] into the config file (a blank value removes the key's value) and reloads.
+     * Comments and the order of the file are preserved: existing `key=` lines are replaced in
+     * place, unknown keys are appended. Keys with an environment override are written too, the
+     * environment just keeps winning until it is removed.
+     */
+    fun save(updates: Map<String, String>) {
+        val text = if (file.isFile) file.readText() else DEFAULT_CONF
+        val lines = text.split('\n').toMutableList()
+        val remaining = LinkedHashMap(updates)
+        for (i in lines.indices) {
+            val line = lines[i]
+            val key = line.substringBefore('=', "").trim()
+            if (line.isBlank() || line.trimStart().startsWith("#") || !line.contains('=') || key !in remaining) continue
+            lines[i] = "$key=${escape(remaining.remove(key)!!)}"
+        }
+        if (remaining.isNotEmpty()) {
+            if (lines.lastOrNull()?.isNotBlank() == true) lines += ""
+            for ((k, v) in remaining) lines += "$k=${escape(v)}"
+        }
+        file.parentFile?.mkdirs()
+        file.writeText(lines.joinToString("\n"))
+        reload()
+    }
+
+    /** Re-reads the file; the typed accessors pick the new values up on their next call. */
+    fun reload() {
+        val p = Properties()
+        if (file.isFile) file.inputStream().use { p.load(it) }
+        synchronized(props) { props.clear(); props.putAll(p) }
+    }
+
+    /** Properties escaping for the few characters that matter (backslashes, leading spaces). */
+    private fun escape(v: String): String = v.trim().replace("\\", "\\\\")
+
     companion object {
         const val FILE_NAME = "cambackup.conf"
 
@@ -86,7 +142,8 @@ class Config(val dataDir: File, private val props: Properties, private val env: 
         val DEFAULT_CONF: String = """
             |# cambackup server configuration. Every key can be overridden by an environment
             |# variable CAMBACKUP_<KEY> (dots -> underscores, upper case), e.g. CAMBACKUP_EXIF_TIMESHIFT.
-            |# Relative paths are resolved against the data directory.
+            |# Relative paths are resolved against the data directory. The web UI's settings page
+            |# (http://<host>:52235/settings) edits this file; the environment always wins over it.
             |
             |# HTTP port for the camera (UPnP), the phone (backend API) and the web UI.
             |http.port=52235
@@ -109,9 +166,12 @@ class Config(val dataDir: File, private val props: Properties, private val env: 
             |storage.subfolder=flat
             |
             |# Bearer token the Android app must send in backend mode (empty = no auth; LAN only!).
+            |# Also protects the settings page (HTTP Basic auth, any user name, this token as password).
             |api.token=
             |# Serve the status page and the pairing-file download at /
             |ui.enabled=true
+            |# Serve the settings page at /settings
+            |ui.settings=true
             |
             |# ---- post-processing pipeline (a stage is skipped when unset or when its tool is missing) ----
             |

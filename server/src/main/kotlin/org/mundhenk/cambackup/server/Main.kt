@@ -84,7 +84,7 @@ class CamBackupServer private constructor(
             val tools = Tools(log, config.toolsPath)
             tools.probeInBackground(listOf(config.exifTool, "darktable-cli", "rawtherapee-cli", "dcraw_emu"))
             val pipeline = Pipeline(config, ledger, tools, log)
-            val sink = ServerSink(config.storageDir.apply { mkdirs() }, ledger, pipeline, log, config.storageSubfolder)
+            val sink = ServerSink(config.storageDir.apply { mkdirs() }, ledger, pipeline, log) { config.storageSubfolder }
             var statsRef: BackupServer? = null
             val api = Api(config, identity, sink, ledger, tools, { statsRef?.stats }, log)
             val backup = BackupServer(

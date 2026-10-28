@@ -46,7 +46,10 @@ class Api(
             path == "/api/v1/status" && req.method == "GET" -> json(statusJson())
             path == "/api/v1/log" && req.method == "GET" -> text(ServerLog.snapshot().joinToString("\n"))
             path == "/health" -> text("ok")
-            config.uiEnabled && path == "/" && req.method == "GET" -> html(StatusPage.render(this.statusModel()))
+            config.uiEnabled && path == "/" && req.method == "GET" -> html(StatusPage.render(this.statusModel(), req.query["scheme"]))
+            config.uiEnabled && config.uiSettings && path == "/settings" && req.method == "GET" -> settingsAuthed(req) { html(SettingsPage.render(config, notice = req.query["saved"]?.let { "Saved. Settings marked restart take effect after a restart, everything else from the next file on." }, scheme = req.query["scheme"])) }
+            config.uiEnabled && config.uiSettings && path == "/settings" && req.method == "POST" -> settingsAuthed(req) { saveSettings(req) }
+            config.uiEnabled && config.uiSettings && path == "/settings/adopt-env" && req.method == "POST" -> settingsAuthed(req) { adoptEnvironment() }
             config.uiEnabled && path == "/pairing.zip" -> HttpResponse(200, PairingFile.zip(identity), "application/zip",
                 mapOf("Content-Disposition" to "attachment; filename=\"SAMSUNGAutoBackupDESC.zip\""))
             config.uiEnabled && path.equals("/SAMSUNGAutoBackupDESC.ini", true) -> HttpResponse(200, PairingFile.render(identity).toByteArray(Charsets.US_ASCII), "text/plain",
@@ -67,6 +70,42 @@ class Api(
 
     private fun constantTimeEquals(a: String, b: String): Boolean =
         MessageDigest.isEqual(a.toByteArray(), b.toByteArray())
+
+    /**
+     * The settings page runs in a browser, so it uses HTTP Basic auth with the api.token as the
+     * password (any user name). Without a token the page is open, like the status page.
+     */
+    private fun settingsAuthed(req: HttpRequest, body: () -> HttpResponse): HttpResponse {
+        val token = config.apiToken ?: return body()
+        val header = req.header("authorization") ?: ""
+        val presented = if (header.startsWith("Basic ", true)) {
+            try { String(java.util.Base64.getDecoder().decode(header.substring(6).trim()), Charsets.UTF_8).substringAfter(':') } catch (e: IllegalArgumentException) { "" }
+        } else header.removePrefix("Bearer ").trim()
+        if (presented.isEmpty() || !constantTimeEquals(presented, token)) {
+            log("Rejected ${req.method} ${req.path} from ${req.remoteAddress}: settings need the api.token")
+            return HttpResponse(401, "The settings page needs the api.token as password (any user name).".toByteArray(), "text/plain",
+                mapOf("WWW-Authenticate" to "Basic realm=\"Samsung Camera Backup settings\", charset=\"UTF-8\""))
+        }
+        return body()
+    }
+
+    private fun saveSettings(req: HttpRequest): HttpResponse {
+        val form = SettingsCatalog.parseForm(req.readBodyText())
+        val (updates, errors) = SettingsCatalog.updatesFrom(form)
+        if (errors.isNotEmpty()) return html(SettingsPage.render(config, errors = errors))
+        // keys the environment overrides are not editable in the browser; keep the file's value for them
+        val editable = updates.filterKeys { config.envValue(it) == null }
+        config.save(editable)
+        log("Settings saved from ${req.remoteAddress}: ${editable.keys.joinToString(", ")}")
+        return HttpResponse(303, ByteArray(0), "text/plain", mapOf("Location" to "/settings?saved=1"))
+    }
+
+    private fun adoptEnvironment(): HttpResponse {
+        val fromEnv = SettingsCatalog.all.mapNotNull { def -> config.envValue(def.key)?.let { def.key to it } }.toMap()
+        config.save(fromEnv)
+        log("Settings: copied ${fromEnv.size} environment value(s) into ${config.file.name}: ${fromEnv.keys.joinToString(", ")}")
+        return HttpResponse(303, ByteArray(0), "text/plain", mapOf("Location" to "/settings?saved=1"))
+    }
 
     private fun files(req: HttpRequest, rest: String): HttpResponse {
         val parts = rest.split('/').map { URLDecoder.decode(it, "UTF-8") }
@@ -155,34 +194,22 @@ class Api(
 object StatusPage {
     private fun esc(s: String) = UpnpXml.escape(s)
 
-    fun render(m: Api.StatusModel): String {
+    fun render(m: Api.StatusModel, scheme: String? = null): String {
         val s = m.stats
         fun mb(b: Long) = String.format("%.1f MB", b / 1e6)
+        val cfg = m.config.toMap()
         val sb = StringBuilder()
-        sb.append("""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="refresh" content="10"><title>Samsung Camera Backup</title>
-<style>
-/* tokens: docs/BRANDING.md (same values as the Android app) */
-:root{--bg:#fff;--fg:#1a1a1a;--muted:#666;--line:#e3e3e3;--accent:#2a6fdb;--on-accent:#fff;--ok:#2e7d32;--bad:#c62828;--card:#f7f7f7}
-@media(prefers-color-scheme:dark){:root{--bg:#121212;--fg:#eee;--muted:#aaa;--line:#333;--accent:#8ab4f8;--on-accent:#0b2a5b;--ok:#81c995;--bad:#f28b82;--card:#1e1e1e}}
-body{font:15px/1.5 system-ui,sans-serif;margin:0;background:var(--bg);color:var(--fg)}
-header{background:var(--accent);color:var(--on-accent);padding:14px 16px;font-size:1.25em;font-weight:500}
-header span{opacity:.8;font-weight:400;font-size:.8em;margin-left:12px}
-main{max-width:1000px;margin:auto;padding:16px}
-h1{font-size:1.4em;margin:.2em 0}h2{font-size:1.05em;margin:1.4em 0 .4em;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
-.check{color:var(--accent);font-weight:500;white-space:nowrap}.dot{display:inline-block;width:12px;height:12px;border-radius:50%;background:var(--ok);margin-right:8px;vertical-align:middle}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
-.tile{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
-.tile b{display:block;font-size:1.4em}.tile span{color:var(--muted);font-size:.85em}
-table{border-collapse:collapse;width:100%}td,th{text-align:left;padding:4px 8px;border-bottom:1px solid var(--line);font-size:.9em}
-code,pre{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.85em}pre{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;max-height:420px;white-space:pre-wrap}
-a{color:var(--accent)}.ok{color:var(--ok)}.bad{color:var(--bad)}.btn{display:inline-block;padding:8px 14px;border:1px solid var(--accent);border-radius:8px;text-decoration:none;margin:4px 8px 4px 0}
-</style></head><body>""")
-        sb.append("<header>Samsung Camera Backup<span>home server</span></header><main>")
-        sb.append("<h1><span class=\"dot\"></span>Running &mdash; ${esc(m.identity.friendlyName)}</h1>")
-        sb.append("<div>UDN <code>uuid:${esc(m.identity.udn)}</code> &middot; port ${m.port} &middot; up ${m.uptime.toHours()}h ${m.uptime.toMinutesPart()}m &middot; data <code>${esc(m.dataDir)}</code></div>")
-        sb.append("<p><a class=\"btn\" href=\"/pairing.zip\">Download pairing zip for SD card</a> <a class=\"btn\" href=\"/SAMSUNGAutoBackupDESC.ini\">Pairing .ini only</a> <a class=\"btn\" href=\"/api/v1/status\">JSON</a></p>")
-        sb.append("<div style=\"color:var(--muted);font-size:.9em\">Unzip into the SD card root (creates <code>dlna_web_root/SAMSUNGAutoBackupDESC.ini</code>). Put the same UDN in the Android app so both targets share one pairing file.</div>")
+        sb.append(Html.head("Status", refreshSeconds = 10, scheme = scheme))
+        sb.append(Html.header("status"))
+        sb.append("<main>")
+        // the same status card as the app: dot + state, hint, destination line, primary action
+        sb.append("<div class=\"card\"><div class=\"state\"><span class=\"dot\"></span>Running &mdash; ${esc(m.identity.friendlyName)}</div>")
+        sb.append("<div class=\"hint\">Waiting for the camera: Wi-Fi &rarr; Auto Backup. UDN <code>uuid:${esc(m.identity.udn)}</code> &middot; port ${m.port} &middot; up ${m.uptime.toHours()}h ${m.uptime.toMinutesPart()}m</div>")
+        sb.append("<div class=\"dest\">Photos &rarr; <code>${esc(cfg["storage.dir"] ?: "")}</code> ${esc((cfg["storage.subfolder"] ?: "(flat)").let { if (it.startsWith("(")) it else "($it)" })}")
+        if (cfg["export.dir"] != null && cfg["export.dir"] != "(off)") sb.append(" &rarr; <code>${esc(cfg["export.dir"]!!)}</code>")
+        sb.append(" &middot; data <code>${esc(m.dataDir)}</code> <a href=\"/settings\">Change</a></div>")
+        sb.append("<p style=\"margin:12px 0 0\"><a class=\"btn\" href=\"/pairing.zip\">Download pairing zip for SD card</a> <a class=\"btn secondary\" href=\"/SAMSUNGAutoBackupDESC.ini\">Pairing .ini only</a></p>")
+        sb.append("<div class=\"help\">Unzip into the SD card root (creates <code>dlna_web_root/SAMSUNGAutoBackupDESC.ini</code>). Put the same UDN in the Android app so both targets share one pairing file.</div></div>")
         sb.append("<h2>Totals</h2><div class=\"grid\">")
         sb.append("<div class=\"tile\"><b>${s?.sessions?.get() ?: 0}</b><span>sessions since start</span></div>")
         sb.append("<div class=\"tile\"><b>${s?.filesStored?.get() ?: 0}</b><span>files stored since start</span></div>")
@@ -192,24 +219,22 @@ a{color:var(--accent)}.ok{color:var(--ok)}.bad{color:var(--bad)}.btn{display:inl
         sb.append("<div class=\"tile\"><b>${m.sessions.size}</b><span>sessions in progress</span></div>")
         sb.append("</div>")
         if (s?.lastFile != null) sb.append("<p>Last: <code>${esc(s.lastFile ?: "")}</code> from ${esc(s.lastCamera ?: "?")}</p>")
-        sb.append("<h2>Recent files</h2>")
-        if (m.recent.isEmpty()) sb.append("<p style=\"color:var(--muted)\">Nothing received yet. Camera: Wi-Fi &rarr; Auto Backup.</p>")
+        sb.append("<h2>Transferred photos${if (m.recent.isNotEmpty()) " (${m.ledgerSize})" else ""}</h2>")
+        if (m.recent.isEmpty()) sb.append("<p class=\"help\">Nothing received yet. Camera: Wi-Fi &rarr; Auto Backup.<br>&#10003; on the phone &middot; &#10003;&#10003; on the home server</p>")
         else {
-            sb.append("<table><tr><th></th><th>Name</th><th>Camera date</th><th>Size</th><th>Now at</th></tr>")
-            for (e in m.recent) sb.append("<tr><td class=\"check\" title=\"on the server\">&#10003;&#10003;</td><td>${esc(e.name)}</td><td>${esc(e.date)}</td><td>${mb(e.size)}</td><td><code>${esc(e.path)}</code></td></tr>")
+            sb.append("<table class=\"files\">")
+            for (e in m.recent) sb.append("<tr><td class=\"check\" title=\"on the server\">&#10003;&#10003;</td><td><div class=\"name\">${esc(e.name)}</div><div class=\"help\">${esc(e.date)} &middot; ${mb(e.size)} &middot; ${esc(java.time.Instant.ofEpochMilli(e.receivedAt).atZone(java.time.ZoneId.systemDefault()).toLocalDateTime().withNano(0).toString().replace('T', ' '))}</div><div class=\"help\">On the server &middot; <code>${esc(e.path)}</code></div></td></tr>")
             sb.append("</table>")
         }
-        sb.append("<h2>Pipeline</h2><table>")
-        for ((k, v) in m.config) sb.append("<tr><td><code>${esc(k)}</code></td><td>${esc(v)}</td></tr>")
-        sb.append("</table>")
         if (m.tools.isNotEmpty()) {
-            sb.append("<p>Tools: ")
+            sb.append("<h2>Tools</h2><p>")
             sb.append(m.tools.entries.joinToString(" &middot; ") { (t, ok) -> "<span class=\"${if (ok) "ok" else "bad"}\">${esc(t)} ${if (ok) "&#10003;" else "&#10007;"}</span>" })
-            sb.append("</p>")
+            sb.append(" &middot; <a href=\"/settings\">Settings</a></p>")
         }
         sb.append("<h2>Log</h2><pre>")
         for (l in m.log) sb.append(esc(l)).append('\n')
-        sb.append("</pre><p style=\"color:var(--muted);font-size:.85em\">Samsung Camera Backup is an independent project, not affiliated with Samsung.</p></main></body></html>")
+        sb.append("</pre>")
+        sb.append(Html.footer())
         return sb.toString()
     }
 }

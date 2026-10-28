@@ -26,7 +26,14 @@ server runs.
 
 ## Home server status page
 
-Totals, recent files (all ✓✓ by definition), pipeline settings, tool availability and the log;
-the pairing zip is one click away.
+The same status card as the app, totals, the transferred files (all ✓✓ by definition), tool
+availability and the log; the pairing zip is one click away.
 
 ![Status page](screenshots/web-status.png)
+
+## Home server settings page
+
+Every option of `cambackup.conf` with an explanation. Values from the compose file carry an
+`environment` badge and are read-only; "restart" marks what needs a restart.
+
+![Settings page](screenshots/web-settings.png)

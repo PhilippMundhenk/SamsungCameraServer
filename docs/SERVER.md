@@ -52,6 +52,20 @@ Upgrading from a version that stored uploads under `/data/incoming`: move the da
 into the `photos` volume (`mv data/incoming/* photos/`). The ledger keeps the old paths in its
 "now at" column, but deduplication keys on date + name + size, so nothing is received twice.
 
+## Settings page
+
+`http://<host>:52235/settings` edits `cambackup.conf` from the browser: every option below with
+a short explanation, grouped into Camera, Storage, Pipeline, Hooks and Web UI. Rules:
+
+* **The environment always wins.** A value set in the compose file is shown read-only with an
+  `environment` badge. "Copy the environment values into the file" writes them into
+  `cambackup.conf`; afterwards the entries can be removed from the compose file.
+* Settings marked **restart** (port, identity, SSDP, storage directory, the UI switches) take
+  effect after a restart; everything else applies to the next file or session.
+* With `api.token` set, the page asks for a password (any user name, the token). Without a
+  token it is open to the LAN, like the status page, and says so. `ui.settings=false` removes
+  the page.
+
 ## Options
 
 | Key | Default | Meaning |
@@ -64,6 +78,7 @@ into the `photos` volume (`mv data/incoming/* photos/`). The ledger keeps the ol
 | `storage.subfolder` | `flat` | folders under `storage.dir` from the camera's date: `flat` (none), `day` (`{yyyy}-{MM}-{dd}`), `month` (`{yyyy}/{MM}`), `year` (`{yyyy}`), or any pattern with `{yyyy} {MM} {dd}` and `/`. A second file with the same name gets `_1`, `_2`, … |
 | `api.token` | empty | bearer token the app must send (empty = anyone on the LAN can upload) |
 | `ui.enabled` | `true` | status page and pairing download |
+| `ui.settings` | `true` | the settings page at `/settings` |
 | `exif.timeshift` | off | shift all EXIF dates, exiftool syntax: `+1:00`, `-0:30`, `+0:0:1 0:0:0` |
 | `raw.convert` | `false` | render a JPEG next to every `.SRW` (`raw.converter` = auto / darktable / rawtherapee / dcraw / none; `raw.onlyifnojpeg`, `raw.quality`) |
 | `rename.pattern` | off | e.g. `{yyyy}{MM}{dd}_{HH}{mm}{ss}_{camera}_{base}.{ext}` (EXIF via exiftool, falls back to the camera date) |
