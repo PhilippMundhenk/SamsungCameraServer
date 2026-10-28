@@ -139,7 +139,14 @@ POST {base}/api/v1/identity  {"udn","name"}               server adopts the iden
 
 Every request from the app carries `X-NX-Device: <phone nickname>`; the status page lists the
 devices it has seen (cameras by address, phones by nickname, with sessions, files and last
-activity) under **Devices**, persisted in `devices.tsv`.
+activity) under **Devices**, persisted in `devices.tsv`. Every device can be given a name there
+("NX1000", "Living room camera"): type it into the field under the device and press *Name*.
+Cameras are told apart by their IP address, so give the camera a fixed address in your router
+if you want the name to stick. The name shows up in the device list, the *Last:* line, the log
+(`Session from NX1000 (192.168.1.20): ...`) and `GET /api/v1/status` (`devices[].name`). The
+form is protected like the settings page (`api.token` as HTTP Basic password); an empty name
+removes it. `POST /devices/rename` with `kind=CAMERA|PHONE&id=<address or nickname>&nickname=<name>`
+does the same from a script.
 
 `{date}` is the camera's `dc:date` (YYYY-MM-DD), `{name}` the original file name. With
 `api.token` set, `/api/v1/files` and `/api/v1/events` require `Authorization: Bearer <token>`

@@ -25,7 +25,8 @@ All notable changes to this project are documented here. The format follows
   the server's UDN or hand its own to the server (`GET`/`POST /api/v1/identity`; the server
   rewrites its pairing file and restarts its camera side live). The UDN history records where
   each identity came from; the phone has a nickname that the server's new **Devices** list
-  shows next to the cameras it has seen.
+  shows next to the cameras it has seen. Cameras and phones can be named on the status page
+  (`POST /devices/rename`); the name is used in the list, the log and `/api/v1/status`.
 - Server: a settings page at `/settings` edits `cambackup.conf` from the browser (environment
   values read-only with a badge and a "copy into the file" button, restart markers, protected
   by `api.token` as HTTP Basic password). The status page now shows the same status card as the

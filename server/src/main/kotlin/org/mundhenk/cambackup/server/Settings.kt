@@ -183,7 +183,9 @@ a{color:var(--accent)}.ok{color:var(--ok)}.bad{color:var(--bad)}
 .notice{background:var(--accent-soft);border-radius:8px;padding:10px 12px}.notice.warn{border-left:4px solid var(--bad)}.notice.bad{color:var(--bad)}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin:16px 0}
 .card .state{font-size:1.4em;font-weight:500}.card .hint{color:var(--muted);margin-top:4px}.card .dest{color:var(--muted);font-size:.9em;margin-top:12px}
-table.files td{padding:8px}table.files td.check{width:40px;font-size:1.15em}table.files .name{font-size:1.05em}
+table.files td{padding:8px}table.files td.check{width:40px;font-size:1.15em}
+form.rename{display:flex;gap:6px;align-items:center;margin-top:6px}form.rename input[type=text]{max-width:260px;padding:5px 8px}form.rename .btn{margin:0;padding:5px 10px}
+table.files .name{font-size:1.05em}
 table.settings td.k{width:34%}table.settings input[type=text],table.settings input[type=password],table.settings input[type=number],table.settings select{width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit;font-size:.95em}
 .help{color:var(--muted);font-size:.85em;margin-top:3px}
 </style></head><body>"""

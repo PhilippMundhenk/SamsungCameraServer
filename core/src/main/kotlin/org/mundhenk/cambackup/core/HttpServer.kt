@@ -57,7 +57,7 @@ class HttpServer(
 ) {
     private var serverSocket: ServerSocket? = null
     private val running = AtomicBoolean(false)
-    private val pool = Executors.newCachedThreadPool { r -> Thread(r, "cambackup-http").apply { isDaemon = true } }
+    private val pool = Executors.newCachedThreadPool { r -> Thread(r, THREAD_NAME).apply { isDaemon = true } }
 
     val boundPort: Int get() = serverSocket?.localPort ?: port
 
@@ -80,6 +80,10 @@ class HttpServer(
         if (!running.getAndSet(false)) return
         try { serverSocket?.close() } catch (_: IOException) {}
         pool.shutdownNow()
+        // stop() may run on one of our own handler threads (an identity change restarts the server
+        // from inside a request): shutdownNow interrupted that thread too; clear the flag so the
+        // handler can still finish its response.
+        if (Thread.currentThread().name == THREAD_NAME) Thread.interrupted()
     }
 
     private fun serve(socket: Socket) {
@@ -176,6 +180,8 @@ class HttpServer(
     }
 
     companion object {
+        private const val THREAD_NAME = "cambackup-http"
+
         fun reasonPhrase(status: Int): String = when (status) {
             200 -> "OK"; 201 -> "Created"; 204 -> "No Content"; 302 -> "Found"; 304 -> "Not Modified"
             400 -> "Bad Request"; 401 -> "Unauthorized"; 403 -> "Forbidden"; 404 -> "Not Found"

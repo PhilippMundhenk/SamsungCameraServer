@@ -15,7 +15,7 @@ import java.io.File
 class DevicesTest {
     private lateinit var dataDir: File
     private val servers = ArrayList<CamBackupServer>()
-    private val log = ArrayList<String>()
+    private val log = java.util.concurrent.CopyOnWriteArrayList<String>()   // written by server threads too
 
     @Before fun setUp() { dataDir = TestSupport.tempDir("cambackup-devices") }
     @After fun tearDown() { servers.forEach { it.stop() }; dataDir.deleteRecursively() }
@@ -51,7 +51,7 @@ class DevicesTest {
         val px = devices.first { it.kind == Devices.Kind.PHONE }
         assertEquals("Pixel 7", px.id); assertEquals(1, px.sessions); assertEquals(1, px.files); assertTrue(px.detail.startsWith("Java/"))
         val page = http("GET", "$base/").second
-        assertTrue(page, page.contains("<h2>Devices</h2>") && page.contains("Pixel 7") && page.contains("Phone &middot; 1 session &middot; 1 file"))
+        assertTrue(page, page.contains("Devices</h2>") && page.contains("Pixel 7") && page.contains("Phone &middot; 1 session &middot; 1 file"))
         assertTrue(page.contains("Camera &middot; 1 session &middot; 1 file"))
 
         // persisted across restarts, counters keep growing, last line wins
@@ -66,6 +66,55 @@ class DevicesTest {
         // garbage lines in the file are skipped
         File(dataDir, "devices.tsv").appendText("broken\tline\n")
         assertEquals(3, Devices(File(dataDir, "devices.tsv")).all().size)
+    }
+
+    /** Cameras (by address) and phones can be given names on the status page; the name follows them into log and JSON. */
+    @Test
+    fun camerasAndPhonesCanBeNamed() {
+        val s = start(mapOf("CAMBACKUP_API_TOKEN" to "tok", "CAMBACKUP_EXIF_TOOL" to "no-exiftool-here"))
+        val base = "http://127.0.0.1:${s.port}"
+        val basic = mapOf("Authorization" to "Basic " + java.util.Base64.getEncoder().encodeToString("x:tok".toByteArray()), "Content-Type" to "application/x-www-form-urlencoded")
+        CameraSimulator("127.0.0.1", s.port) { log += it }.runBackup(listOf(CameraSimulator.SimFile("A.JPG", "2026-10-28", "image/jpeg", ByteArray(10))))
+        s.pipeline.awaitIdle()
+        // the form is on the status page, the row shows the address until a name is given
+        var page = http("GET", "$base/").second
+        assertTrue(page, page.contains("action=\"/devices/rename\"") && page.contains("name=\"id\" value=\"127.0.0.1\"") && page.contains("Name this camera"))
+        assertTrue(page, page.contains("<p>Last: <code>A.JPG</code> from 127.0.0.1</p>"))
+        // protected like the settings page
+        assertEquals(401, http("POST", "$base/devices/rename", "kind=CAMERA&id=127.0.0.1&nickname=NX1000".toByteArray(), mapOf("Content-Type" to "application/x-www-form-urlencoded")).first)
+        // bad input
+        assertEquals(400, http("POST", "$base/devices/rename", "kind=TOASTER&id=1&nickname=x".toByteArray(), basic).first)
+        assertEquals(400, http("POST", "$base/devices/rename", "kind=CAMERA&nickname=x".toByteArray(), basic).first)
+        assertEquals(404, http("POST", "$base/devices/rename", "kind=CAMERA&id=10.9.9.9&nickname=x".toByteArray(), basic).first)
+        // the real thing: trimmed, control characters dropped, capped at 60 chars
+        val (code, _) = http("POST", "$base/devices/rename", "kind=CAMERA&id=127.0.0.1&nickname=%20NX1000%09living%20room%20".toByteArray(), basic, followRedirects = false)
+        assertEquals(303, code)
+        val cam = s.devices.find(Devices.Kind.CAMERA, "127.0.0.1")!!
+        assertEquals("NX1000 living room", cam.nickname); assertEquals("NX1000 living room", cam.displayName)
+        assertEquals("NX1000 living room", s.devices.displayName(Devices.Kind.CAMERA, "127.0.0.1"))
+        assertEquals("10.9.9.9", s.devices.displayName(Devices.Kind.CAMERA, "10.9.9.9"))
+        assertTrue(log.any { it == "Camera 127.0.0.1 named \"NX1000 living room\" from 127.0.0.1" })
+        page = http("GET", "$base/").second
+        assertTrue(page, page.contains("<div class=\"name\">NX1000 living room <span class=\"help\">127.0.0.1</span></div>") && page.contains("value=\"NX1000 living room\"") && page.contains(">Rename</button>"))
+        assertTrue(page, page.contains("<p>Last: <code>A.JPG</code> from NX1000 living room</p>"))
+        assertTrue(http("GET", "$base/api/v1/status").second.contains("\"devices\":[{\"kind\":\"camera\",\"id\":\"127.0.0.1\",\"name\":\"NX1000 living room\",\"sessions\":1,\"files\":1,"))
+        // the next session is logged under the name; the name survives new activity and a restart
+        CameraSimulator("127.0.0.1", s.port) { log += it }.runBackup(listOf(CameraSimulator.SimFile("B.JPG", "2026-10-28", "image/jpeg", ByteArray(10))))
+        s.pipeline.awaitIdle()
+        assertTrue(log.joinToString("\n"), log.any { it.startsWith("Session from NX1000 living room (127.0.0.1): 1 stored") })
+        assertEquals(2, s.devices.find(Devices.Kind.CAMERA, "127.0.0.1")!!.sessions)
+        assertEquals("NX1000 living room", Devices(File(dataDir, "devices.tsv")).find(Devices.Kind.CAMERA, "127.0.0.1")!!.nickname)
+        // phones too; a long name is cut; an empty name removes it
+        s.devices.seen(Devices.Kind.PHONE, "Pixel 7", "10.0.0.9", "Dalvik", session = true)
+        assertEquals("x".repeat(60), s.devices.rename(Devices.Kind.PHONE, "pixel 7", "x".repeat(70))!!.nickname)
+        assertEquals(303, http("POST", "$base/devices/rename", "kind=PHONE&id=Pixel+7&nickname=".toByteArray(), basic, followRedirects = false).first)
+        assertEquals("", s.devices.find(Devices.Kind.PHONE, "Pixel 7")!!.nickname)
+        assertTrue(log.any { it == "Phone Pixel 7 name removed from 127.0.0.1" })
+        // a name an operator gives is kept when the device is seen again
+        s.devices.rename(Devices.Kind.PHONE, "Pixel 7", "Philipp's phone")
+        s.devices.seen(Devices.Kind.PHONE, "Pixel 7", "10.0.0.10", "Dalvik", files = 1)
+        assertEquals("Philipp's phone", s.devices.find(Devices.Kind.PHONE, "Pixel 7")!!.nickname)
+        assertEquals(null, s.devices.rename(Devices.Kind.PHONE, "nobody", "x"))
     }
 
     /** Phone first, server later: the phone hands its identity to the server, which adopts it live. */
@@ -107,6 +156,7 @@ class DevicesTest {
         val s3 = start(mapOf("CAMBACKUP_API_TOKEN" to "tok", "CAMBACKUP_SERVER_UDN" to before.udn))
         val other = org.mundhenk.cambackup.core.ServerIdentity("4a682b0b-0361-dbae-6155-00000000d00d", "[PC]Other", org.mundhenk.cambackup.core.ServerIdentity.DEFAULT_MAC)
         val result = BackendSink("http://127.0.0.1:${s3.port}", { log += it }, "tok").pushIdentity(other)
+        org.junit.Assert.assertNotNull(log.joinToString("\n"), result)
         assertEquals(before.udn, result!!.udn)
         assertEquals("[PC]Other", result.friendlyName)                                                    // the name was not overridden by the environment
     }

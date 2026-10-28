@@ -26,8 +26,9 @@ server runs.
 
 ## Home server status page
 
-The same status card as the app, totals, the transferred files (all ✓✓ by definition), tool
-availability and the log; the pairing zip is one click away.
+The same status card as the app, totals, the transferred files (all ✓✓ by definition), the
+cameras and phones that have talked to the server (each can be given a name), tool availability
+and the log; the pairing zip is one click away.
 
 ![Status page](screenshots/web-status.png)
 

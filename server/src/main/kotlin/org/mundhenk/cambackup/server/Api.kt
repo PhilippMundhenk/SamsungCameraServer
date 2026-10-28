@@ -56,6 +56,7 @@ class Api(
             config.uiEnabled && config.uiSettings && path == "/settings" && req.method == "GET" -> settingsAuthed(req) { html(SettingsPage.render(config, notice = req.query["saved"]?.let { "Saved. Settings marked restart take effect after a restart, everything else from the next file on." }, scheme = req.query["scheme"])) }
             config.uiEnabled && config.uiSettings && path == "/settings" && req.method == "POST" -> settingsAuthed(req) { saveSettings(req) }
             config.uiEnabled && config.uiSettings && path == "/settings/adopt-env" && req.method == "POST" -> settingsAuthed(req) { adoptEnvironment() }
+            config.uiEnabled && path == "/devices/rename" && req.method == "POST" -> settingsAuthed(req) { renameDevice(req) }
             config.uiEnabled && path == "/pairing.zip" -> HttpResponse(200, PairingFile.zip(identity), "application/zip",
                 mapOf("Content-Disposition" to "attachment; filename=\"SAMSUNGAutoBackupDESC.zip\""))
             config.uiEnabled && path.equals("/SAMSUNGAutoBackupDESC.ini", true) -> HttpResponse(200, PairingFile.render(identity).toByteArray(Charsets.US_ASCII), "text/plain",
@@ -111,6 +112,16 @@ class Api(
         config.save(fromEnv)
         log("Settings: copied ${fromEnv.size} environment value(s) into ${config.file.name}: ${fromEnv.keys.joinToString(", ")}")
         return HttpResponse(303, ByteArray(0), "text/plain", mapOf("Location" to "/settings?saved=1"))
+    }
+
+    /** Status page form: gives a camera (by address) or phone a name. Protected like the settings. */
+    private fun renameDevice(req: HttpRequest): HttpResponse {
+        val form = SettingsCatalog.parseForm(req.readBodyText())
+        val kind = Devices.Kind.entries.firstOrNull { it.name == form["kind"] } ?: return HttpResponse(400, "unknown device kind".toByteArray(), "text/plain")
+        val id = form["id"] ?: return HttpResponse(400, "missing device id".toByteArray(), "text/plain")
+        val renamed = devices?.rename(kind, id, form["nickname"] ?: "") ?: return HttpResponse(404, "unknown device".toByteArray(), "text/plain")
+        log("${if (kind == Devices.Kind.CAMERA) "Camera" else "Phone"} $id ${if (renamed.nickname.isEmpty()) "name removed" else "named \"${renamed.nickname}\""} from ${req.remoteAddress}")
+        return HttpResponse(303, ByteArray(0), "text/plain", mapOf("Location" to "/#devices"))
     }
 
     private fun files(req: HttpRequest, rest: String): HttpResponse {
@@ -179,7 +190,10 @@ class Api(
         val ledgerSize: Int, val recent: List<Ledger.Entry>, val sessions: Map<String, Session>,
         val config: List<Pair<String, String>>, val tools: Map<String, Boolean>, val log: List<String>, val dataDir: String,
         val devices: List<Devices.Device> = emptyList(),
-    )
+    ) {
+        /** A camera's given name, or its address when it has none. */
+        fun deviceName(address: String): String = devices.firstOrNull { it.kind == Devices.Kind.CAMERA && it.id.equals(address, true) }?.displayName ?: address
+    }
 
     fun statusModel() = StatusModel(
         identity, config.httpPort, Duration.between(startedAt, Instant.now()), stats(),
@@ -202,6 +216,13 @@ class Api(
             append(",\"lastFile\":").append(Json.str(s?.lastFile))
             append(",\"totalFiles\":").append(m.ledgerSize)
             append(",\"activeSessions\":").append(m.sessions.size)
+            append(",\"devices\":[")
+            m.devices.forEachIndexed { i, d ->
+                if (i > 0) append(',')
+                append("{\"kind\":").append(Json.str(d.kind.name.lowercase())).append(",\"id\":").append(Json.str(d.id)).append(",\"name\":").append(Json.str(d.displayName))
+                append(",\"sessions\":").append(d.sessions).append(",\"files\":").append(d.files).append(",\"lastSeen\":").append(d.lastSeen).append('}')
+            }
+            append("]")
             append(",\"recent\":[")
             m.recent.forEachIndexed { i, e ->
                 if (i > 0) append(',')
@@ -245,7 +266,7 @@ object StatusPage {
         sb.append("<div class=\"tile\"><b>${m.ledgerSize}</b><span>files in ledger (all time)</span></div>")
         sb.append("<div class=\"tile\"><b>${m.sessions.size}</b><span>sessions in progress</span></div>")
         sb.append("</div>")
-        if (s?.lastFile != null) sb.append("<p>Last: <code>${esc(s.lastFile ?: "")}</code> from ${esc(s.lastCamera ?: "?")}</p>")
+        if (s?.lastFile != null) sb.append("<p>Last: <code>${esc(s.lastFile ?: "")}</code> from ${esc(m.deviceName(s.lastCamera ?: "?"))}</p>")
         sb.append("<h2>Transferred photos${if (m.recent.isNotEmpty()) " (${m.ledgerSize})" else ""}</h2>")
         if (m.recent.isEmpty()) sb.append("<p class=\"help\">Nothing received yet. Camera: Wi-Fi &rarr; Auto Backup.<br>&#10003; on the phone &middot; &#10003;&#10003; on the home server</p>")
         else {
@@ -253,15 +274,17 @@ object StatusPage {
             for (e in m.recent) sb.append("<tr><td class=\"check\" title=\"on the server\">&#10003;&#10003;</td><td><div class=\"name\">${esc(e.name)}</div><div class=\"help\">${esc(e.date)} &middot; ${mb(e.size)} &middot; ${esc(java.time.Instant.ofEpochMilli(e.receivedAt).atZone(java.time.ZoneId.systemDefault()).toLocalDateTime().withNano(0).toString().replace('T', ' '))}</div><div class=\"help\">On the server &middot; <code>${esc(e.path)}</code></div></td></tr>")
             sb.append("</table>")
         }
-        sb.append("<h2>Devices</h2>")
+        sb.append("<h2 id=\"devices\">Devices</h2>")
         if (m.devices.isEmpty()) sb.append("<p class=\"help\">No camera or phone has talked to this server yet. This server: <code>uuid:${esc(m.identity.udn)}</code>; the app offers \"Use the server's identity\" so phone and server share one pairing file.</p>")
         else {
             sb.append("<table class=\"files\">")
             for (d in m.devices) {
                 val kind = if (d.kind == Devices.Kind.CAMERA) "Camera" else "Phone"
-                sb.append("<tr><td class=\"check\" title=\"$kind\">${if (d.kind == Devices.Kind.CAMERA) "&#128247;" else "&#128241;"}</td><td><div class=\"name\">${esc(d.id)}</div>")
+                sb.append("<tr><td class=\"check\" title=\"$kind\">${if (d.kind == Devices.Kind.CAMERA) "&#128247;" else "&#128241;"}</td><td><div class=\"name\">${esc(d.displayName)}${if (d.nickname.isNotEmpty()) " <span class=\"help\">${esc(d.id)}</span>" else ""}</div>")
                 sb.append("<div class=\"help\">$kind &middot; ${d.sessions} session${if (d.sessions == 1) "" else "s"} &middot; ${d.files} file${if (d.files == 1) "" else "s"} &middot; last seen ${esc(java.time.Instant.ofEpochMilli(d.lastSeen).atZone(java.time.ZoneId.systemDefault()).toLocalDateTime().withNano(0).toString().replace('T', ' '))}</div>")
-                sb.append("<div class=\"help\">${esc(d.address)}${if (d.detail.isNotEmpty()) " &middot; " + esc(d.detail) else ""}</div></td></tr>")
+                sb.append("<div class=\"help\">${esc(d.address)}${if (d.detail.isNotEmpty()) " &middot; " + esc(d.detail) else ""}</div>")
+                sb.append("<form method=\"post\" action=\"/devices/rename\" class=\"rename\"><input type=\"hidden\" name=\"kind\" value=\"${d.kind.name}\"><input type=\"hidden\" name=\"id\" value=\"${esc(d.id)}\">")
+                sb.append("<input type=\"text\" name=\"nickname\" maxlength=\"60\" value=\"${esc(d.nickname)}\" placeholder=\"${if (d.kind == Devices.Kind.CAMERA) "Name this camera, e.g. NX1000" else "Name this phone"}\" aria-label=\"Name for ${esc(d.id)}\"> <button class=\"btn secondary\" type=\"submit\">${if (d.nickname.isEmpty()) "Name" else "Rename"}</button></form></td></tr>")
             }
             sb.append("</table>")
         }

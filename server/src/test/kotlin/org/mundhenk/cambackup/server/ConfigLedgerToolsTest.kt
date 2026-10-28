@@ -14,7 +14,7 @@ import java.io.File
 
 class ConfigLedgerToolsTest {
     private lateinit var dir: File
-    private val log = ArrayList<String>()
+    private val log = java.util.concurrent.CopyOnWriteArrayList<String>()   // written by server threads too
 
     @Before fun setUp() { dir = TestSupport.tempDir("cambackup-clt") }
     @After fun tearDown() { dir.deleteRecursively() }

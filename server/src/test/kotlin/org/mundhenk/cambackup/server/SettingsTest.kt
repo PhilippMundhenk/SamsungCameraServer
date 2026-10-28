@@ -16,7 +16,7 @@ import java.util.Base64
 class SettingsTest {
     private lateinit var dataDir: File
     private val servers = ArrayList<CamBackupServer>()
-    private val log = ArrayList<String>()
+    private val log = java.util.concurrent.CopyOnWriteArrayList<String>()   // written by server threads too
 
     @Before fun setUp() { dataDir = TestSupport.tempDir("cambackup-settings") }
     @After fun tearDown() { servers.forEach { it.stop() }; dataDir.deleteRecursively() }

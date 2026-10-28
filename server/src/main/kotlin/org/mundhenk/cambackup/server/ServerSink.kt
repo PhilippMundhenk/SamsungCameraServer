@@ -76,8 +76,14 @@ class ServerSink(
     override fun onBackupDone(cameraAddress: String, sysOff: Boolean) {
         val session = sessions.remove(cameraAddress) ?: Session(cameraAddress)
         devices?.seen(Devices.Kind.CAMERA, cameraAddress, cameraAddress, files = session.stored)
-        log("Session from $cameraAddress: ${session.stored} stored, ${session.skipped} skipped" + if (sysOff) ", camera asks for shutdown" else "")
+        log("Session from ${cameraLabel(cameraAddress)}: ${session.stored} stored, ${session.skipped} skipped" + if (sysOff) ", camera asks for shutdown" else "")
         pipeline.submitSessionDone(session, sysOff)
+    }
+
+    /** "NX1000 (192.168.1.20)" once the camera has a name, else just the address. */
+    private fun cameraLabel(address: String): String {
+        val name = devices?.displayName(Devices.Kind.CAMERA, address) ?: address
+        return if (name == address) address else "$name ($address)"
     }
 
     private fun target(file: IncomingFile): File =
