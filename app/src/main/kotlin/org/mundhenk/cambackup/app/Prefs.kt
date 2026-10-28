@@ -72,7 +72,7 @@ class Prefs(context: Context) {
         val name = nameInput?.trim().orEmpty()
         return try {
             val id = ServerIdentity(udn, name.ifBlank { ServerIdentity.DEFAULT_NAME }, ServerIdentity.DEFAULT_MAC)
-            switchUdn(id.udn); this.serverName = id.friendlyName
+            switchUdn(id.udn, SOURCE_MANUAL); this.serverName = id.friendlyName
             null
         } catch (e: IllegalArgumentException) { e.message }
     }
@@ -81,29 +81,59 @@ class Prefs(context: Context) {
     // A camera only finds a server whose UDN is on its SD card, so replacing the UDN cuts off every
     // camera paired with the old one. The history keeps the old codes so they can be put back.
 
-    data class UdnHistoryEntry(val udn: String, val replacedAt: Long)
+    /** [source] says where the UDN came from ("generated on this phone", "from server [PC]Home"). */
+    data class UdnHistoryEntry(val udn: String, val replacedAt: Long, val source: String = "")
 
     val udnHistory: List<UdnHistoryEntry>
         get() = (sp.getString("udnHistory", "") ?: "").lines().mapNotNull { line ->
             val p = line.split('\t')
-            if (p.size >= 2 && p[1].isNotBlank()) UdnHistoryEntry(p[1], p[0].toLongOrNull() ?: 0) else null
+            if (p.size >= 2 && p[1].isNotBlank()) UdnHistoryEntry(p[1], p[0].toLongOrNull() ?: 0, p.getOrNull(2) ?: "") else null
         }
 
-    /** Generates a fresh UDN; the current one goes into the history. Returns the new UDN. */
-    fun regenerateUdn(): String = ServerIdentity.generateUdn().also { switchUdn(it) }
+    /** Where the current UDN came from (shown under the UDN). */
+    var udnSource: String
+        get() = sp.getString("udnSource", "") ?: ""
+        set(v) = sp.edit().putString("udnSource", v).apply()
 
-    /** Makes [target] the current UDN (e.g. one from the history); the current one goes into the history. */
-    fun switchUdn(target: String) {
+    /** How this phone introduces itself to the home server (X-NX-Device) and in the device lists. */
+    var deviceNickname: String
+        get() = (sp.getString("deviceNickname", null) ?: "").ifBlank { defaultNickname() }
+        set(v) = sp.edit().putString("deviceNickname", v.trim()).apply()
+
+    private fun defaultNickname(): String = listOfNotNull(android.os.Build.MANUFACTURER, android.os.Build.MODEL).joinToString(" ").trim().ifBlank { "Phone" }
+        .replaceFirstChar { it.uppercase() }
+
+    /** Generates a fresh UDN; the current one goes into the history. Returns the new UDN. */
+    fun regenerateUdn(): String = ServerIdentity.generateUdn().also { switchUdn(it, SOURCE_GENERATED) }
+
+    /** Takes over the server's identity (UDN and name) so one pairing file serves phone and server. */
+    fun adoptIdentity(id: ServerIdentity, source: String) {
+        switchUdn(id.udn, source)
+        serverName = id.friendlyName
+    }
+
+    /**
+     * Makes [target] the current UDN; the current one goes into the history with its source.
+     * [source] = where the new UDN comes from; empty = look it up in the history (switching back).
+     */
+    fun switchUdn(target: String, source: String = "") {
         val old = udn
         if (old == target) return
-        val history = listOf(UdnHistoryEntry(old, System.currentTimeMillis())) + udnHistory.filter { it.udn != old && it.udn != target }
+        val oldSource = udnSource.ifBlank { SOURCE_GENERATED }
+        val restored = udnHistory.firstOrNull { it.udn == target }
+        val history = listOf(UdnHistoryEntry(old, System.currentTimeMillis(), oldSource)) + udnHistory.filter { it.udn != old && it.udn != target }
         sp.edit()
-            .putString("udnHistory", history.take(MAX_UDN_HISTORY).joinToString("\n") { "${it.replacedAt}\t${it.udn}" })
+            .putString("udnHistory", history.take(MAX_UDN_HISTORY).joinToString("\n") { "${it.replacedAt}\t${it.udn}\t${it.source.replace('\t', ' ')}" })
             .putString("udn", target)
+            .putString("udnSource", if (source.isNotBlank()) source else restored?.source ?: "")
             .apply()
     }
 
-    companion object { const val MAX_UDN_HISTORY = 20 }
+    companion object {
+        const val MAX_UDN_HISTORY = 20
+        const val SOURCE_GENERATED = "generated on this phone"
+        const val SOURCE_MANUAL = "entered by hand"
+    }
 
     /** Short human readable destination for the status card. */
     fun destinationSummary(context: Context): String {

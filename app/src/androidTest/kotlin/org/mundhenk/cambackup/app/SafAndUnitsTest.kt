@@ -105,6 +105,20 @@ class SafAndUnitsTest {
         assertEquals(u1, prefs.udn); assertEquals(listOf("4a682b0b-0361-dbae-6155-000000000003", u2), prefs.udnHistory.map { it.udn })
         repeat(25) { prefs.regenerateUdn() }
         assertEquals(Prefs.MAX_UDN_HISTORY, prefs.udnHistory.size)
+        // sources travel with the history; adopting a server identity records where it came from
+        assertEquals(Prefs.SOURCE_GENERATED, prefs.udnSource)
+        val server = org.mundhenk.cambackup.core.ServerIdentity("4a682b0b-0361-dbae-6155-00000000beef", "[PC]Home", org.mundhenk.cambackup.core.ServerIdentity.DEFAULT_MAC)
+        prefs.adoptIdentity(server, "from server [PC]Home (http://nas)")
+        assertEquals(server.udn, prefs.udn); assertEquals("[PC]Home", prefs.serverName); assertEquals("from server [PC]Home (http://nas)", prefs.udnSource)
+        assertEquals(Prefs.SOURCE_GENERATED, prefs.udnHistory.first().source)
+        val generated = prefs.udnHistory.first().udn
+        prefs.switchUdn(generated)                                                   // back from the history: its source comes back too
+        assertEquals(Prefs.SOURCE_GENERATED, prefs.udnSource)
+        assertEquals("from server [PC]Home (http://nas)", prefs.udnHistory.first().source)
+        // nickname: default from the device, trimmed when set, blank falls back to the default
+        assertTrue(prefs.deviceNickname.isNotBlank())
+        prefs.deviceNickname = "  Pixel 7  "; assertEquals("Pixel 7", prefs.deviceNickname)
+        prefs.deviceNickname = ""; assertTrue(prefs.deviceNickname.isNotBlank())
         context.getSharedPreferences("cambackup", 0).edit().putString("udnHistory", "garbage\n\t\n12\t4a682b0b-0361-dbae-6155-0000000000aa").commit()
         assertEquals(listOf("4a682b0b-0361-dbae-6155-0000000000aa"), prefs.udnHistory.map { it.udn })
         prefs.mode = Mode.PHONE; prefs.folderUri = null

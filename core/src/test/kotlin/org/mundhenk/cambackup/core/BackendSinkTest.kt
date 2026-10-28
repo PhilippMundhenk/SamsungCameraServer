@@ -14,19 +14,30 @@ import java.util.concurrent.CopyOnWriteArrayList
 /** BackendSink against a scripted backend built from the same HttpServer. */
 class BackendSinkTest {
     private val requests = CopyOnWriteArrayList<String>()
+    private val headersSeen = CopyOnWriteArrayList<String>()
     private val bodies = CopyOnWriteArrayList<ByteArray>()
     private val log = CopyOnWriteArrayList<String>()
     @Volatile private var putStatus = 201
     @Volatile private var headStatus = 404
     @Volatile private var healthStatus = 200
+    @Volatile private var identityBody: String? = """{"udn":"uuid:4a682b0b-0361-dbae-6155-00000000beef","name":"[PC]Ho\"me","mac":"02:4E:58:42:4B:50"}"""
     private lateinit var backend: HttpServer
 
     @Before
     fun setUp() {
         backend = HttpServer(0, { req ->
             requests += "${req.method} ${req.path} auth=${req.header("authorization")} cam=${req.header("x-nx-camera")} cls=${req.header("x-nx-class")} ct=${req.header("content-type")} len=${req.contentLength}"
+            headersSeen += req.headers.entries.joinToString(" ") { "${it.key}=${it.value}" }
             when {
                 req.path == "/health" -> HttpResponse.empty(healthStatus)
+                req.path == "/api/v1/identity" && req.method == "POST" -> {
+                    val b = req.readBodyText(); bodies += b.toByteArray()
+                    if (req.header("authorization") == null) HttpResponse.empty(401) else HttpResponse(200, b.toByteArray(), "application/json")  // echo = adopted
+                }
+                req.path == "/api/v1/identity" -> when (identityBody) {
+                    null -> HttpResponse.notFound()
+                    else -> HttpResponse(200, identityBody!!.toByteArray(), "application/json")
+                }
                 req.path == "/api/v1/events" -> { bodies += req.body.readBytes(); HttpResponse.empty(if (req.header("authorization") == null) 401 else 204) }
                 req.method == "HEAD" -> HttpResponse.empty(headStatus)
                 req.method == "PUT" -> { bodies += req.body.readBytes(); HttpResponse.empty(putStatus) }
@@ -67,6 +78,32 @@ class BackendSinkTest {
         try { s.store(file(1), ByteArrayInputStream("x".toByteArray())); throw AssertionError() } catch (e: IOException) { assertTrue(e.message, e.message!!.contains("401 - wrong backend token")) }
         putStatus = 507
         try { s.store(file(1), ByteArrayInputStream("x".toByteArray())); throw AssertionError() } catch (e: IOException) { assertTrue(e.message, e.message!!.contains("HTTP 507")) }
+    }
+
+    @Test
+    fun identityAndDeviceName() {
+        val named = BackendSink("http://127.0.0.1:${backend.boundPort}", { log += it }, "t0k", deviceName = "Pixel\n 7")
+        val id = named.fetchIdentity()
+        assertEquals(ServerIdentity("4a682b0b-0361-dbae-6155-00000000beef", "[PC]Ho\"me", "02:4E:58:42:4B:50"), id)
+        named.onBackupStart("c")
+        assertTrue(requests.joinToString(" | "), requests.any { it.contains("/api/v1/events") })
+        // the nickname travels as X-NX-Device without line breaks
+        assertTrue(headersSeen.last().contains("x-nx-device=Pixel  7"))
+        identityBody = """{"udn":"not-a-udn","name":"x"}"""
+        assertEquals(null, named.fetchIdentity()); assertTrue(log.last().startsWith("backend identity invalid"))
+        identityBody = """{"nonsense":1}"""
+        assertEquals(null, named.fetchIdentity()); assertTrue(log.last().startsWith("backend identity: unexpected answer"))
+        identityBody = null
+        assertEquals(null, named.fetchIdentity()); assertTrue(log.last().contains("HTTP 404"))
+        assertEquals(null, BackendSink("http://127.0.0.1:1", { log += it }, connectTimeoutMs = 300).fetchIdentity())
+        assertTrue(log.last().startsWith("backend identity failed"))
+        // pushing the phone's identity: the fake server echoes what it adopted
+        val mine = ServerIdentity("4a682b0b-0361-dbae-6155-00000000cafe", "[PC]Pi\"xel", ServerIdentity.DEFAULT_MAC)
+        assertEquals(mine, named.pushIdentity(mine))
+        assertTrue(bodies.last().toString(Charsets.UTF_8).contains("\"name\":\"[PC]Pi\\\"xel\""))
+        assertEquals(null, sink("").pushIdentity(mine)); assertTrue(log.last().contains("identity push -> HTTP 401"))
+        assertEquals(null, BackendSink("http://127.0.0.1:1", { log += it }, connectTimeoutMs = 300).pushIdentity(mine))
+        assertTrue(log.last().startsWith("backend identity push failed"))
     }
 
     @Test

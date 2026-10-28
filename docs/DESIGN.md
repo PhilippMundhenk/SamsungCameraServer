@@ -107,8 +107,12 @@ server/ (Kotlin/JVM, depends only on core; Docker image eclipse-temurin 17 + exi
                    rename pattern -> export/move; per session: webhook, hook.command,
                    sysoff.command
   Api              fallback HttpHandler on the same port: /api/v1/files (HEAD/PUT),
-                   /api/v1/events, /api/v1/status, /api/v1/log, /health, status page at /,
-                   /pairing.zip; bearer token (api.token) protects the phone endpoints
+                   /api/v1/events, /api/v1/status, /api/v1/log, /api/v1/identity (GET public,
+                   POST adopts the phone's identity live), /health, status page at /, settings
+                   page at /settings, /pairing.zip; bearer token (api.token) protects the phone
+                   endpoints and the settings page
+  Devices          who talked to the server: cameras by address, phones by X-NX-Device nickname
+                   (devices.tsv), listed on the status page
   Tools            runs external programs, probes availability once (shown on status page)
 app/   (Android, minSdk 26, Views + Material 3, ViewBinding; tokens from docs/BRANDING.md)
   MainActivity     status card (running dot, destination, Start/Stop, Sync), transfer list

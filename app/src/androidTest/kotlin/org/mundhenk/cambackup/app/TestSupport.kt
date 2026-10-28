@@ -38,6 +38,7 @@ object TestSupport {
         try {
             device.executeShellCommand("wm dismiss-keyguard")
             device.executeShellCommand("settings put global hide_error_dialogs 1")   // the launcher's ANR dialog steals focus
+            device.executeShellCommand("svc power stayon true")                        // long tests must not hit the screen timeout
             device.wakeUp()
             for (label in listOf("Wait", "Close app", "OK", "Allow", "Got it", "Don't allow")) {
                 device.findObject(androidx.test.uiautomator.By.text(label))?.let { android.util.Log.i("UITest", "dismissing '$label'"); it.click() }
@@ -88,7 +89,11 @@ object TestSupport {
     class FakeBackend(private val token: String = "") {
         val files = LinkedHashMap<String, ByteArray>()
         val events = CopyOnWriteArrayList<String>()
+        val deviceNames = CopyOnWriteArrayList<String>()
         @Volatile var healthy = true
+        @Volatile var identity = org.mundhenk.cambackup.core.ServerIdentity("4a682b0b-0361-dbae-6155-00000000beef", "[PC]FakeHome", org.mundhenk.cambackup.core.ServerIdentity.DEFAULT_MAC)
+        @Volatile var serveIdentity = true
+        private fun identityJson() = "{\"udn\":\"" + identity.udn + "\",\"name\":\"" + identity.friendlyName + "\",\"mac\":\"" + identity.macAddr + "\"}"
         private val server = HttpServer(0, ::handle)
         val url: String get() = "http://127.0.0.1:${server.boundPort}"
         fun start() = apply { server.start() }
@@ -96,7 +101,16 @@ object TestSupport {
 
         private fun handle(req: HttpRequest): HttpResponse {
             if (req.path == "/health") return HttpResponse.empty(if (healthy) 200 else 503)
+            req.header("x-nx-device")?.let { deviceNames += it }
+            if (req.path == "/api/v1/identity" && req.method == "GET") return if (serveIdentity) HttpResponse(200, identityJson().toByteArray(), "application/json") else HttpResponse.notFound()
             if (token.isNotEmpty() && req.header("authorization") != "Bearer $token") return HttpResponse.empty(401)
+            if (req.path == "/api/v1/identity" && req.method == "POST") {
+                val body = req.readBodyText()
+                val udn = Regex("\"udn\":\"([^\"]+)\"").find(body)!!.groupValues[1]
+                val name = Regex("\"name\":\"([^\"]+)\"").find(body)!!.groupValues[1]
+                identity = org.mundhenk.cambackup.core.ServerIdentity(udn, name, identity.macAddr)
+                return HttpResponse(200, identityJson().toByteArray(), "application/json")
+            }
             return when {
                 req.path == "/api/v1/events" -> { events += req.readBodyText(); HttpResponse.empty(204) }
                 req.path.startsWith("/api/v1/files/") -> {

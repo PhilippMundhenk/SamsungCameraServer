@@ -32,6 +32,8 @@ settle
 adb shell settings put global hide_error_dialogs 1 || true
 adb shell settings put secure show_first_crash_dialog 0 || true
 adb shell settings put global hidden_api_policy 1 || true
+adb shell svc power stayon true || true
+adb shell settings put system screen_off_timeout 1800000 || true
 sleep 15
 adb logcat -c || true
 adb exec-out screencap -p > "$DIAG/before.png" || true

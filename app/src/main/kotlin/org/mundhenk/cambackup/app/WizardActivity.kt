@@ -38,6 +38,14 @@ class WizardActivity : AppCompatActivity() {
             Ui.confirmNewUdn(this, prefs.udn) { b.udn.text = prefs.regenerateUdn(); LogBus.log("New UDN uuid:${prefs.udn} (previous one kept in the history)") }
         }
         b.exportPairing.setOnClickListener { if (saveIdentity()) savePairing.launch("SAMSUNGAutoBackupDESC.zip") }
+        b.useServerIdentity.setOnClickListener {
+            val server = serverIdentity ?: return@setOnClickListener
+            IdentityExchange.adoptFromServer(this, prefs, server, confirm = false) { b.udn.text = prefs.udn; b.serverName.setText(prefs.serverName); showServerIdentity() }
+        }
+        b.giveServerIdentity.setOnClickListener {
+            if (!saveIdentity()) return@setOnClickListener
+            IdentityExchange.giveToServer(this, prefs, confirm = true) { showServerIdentity() }
+        }
         b.next.setOnClickListener { next() }
         b.back.setOnClickListener { if (step == 0) finish() else show(step - 1) }
         show(0)
@@ -65,6 +73,23 @@ class WizardActivity : AppCompatActivity() {
         }
     }
 
+    private var serverIdentity: org.mundhenk.cambackup.core.ServerIdentity? = null
+
+    /** Step 3 with a server configured: show the server's identity and offer to share it either way. */
+    private fun showServerIdentity() {
+        val show = prefs.mode.usesServer && prefs.backendUrl.isNotBlank()
+        b.serverIdentityCard.visibility = if (show) View.VISIBLE else View.GONE
+        if (!show) return
+        b.serverIdentityInfo.setText(R.string.udn_server_checking)
+        b.useServerIdentity.isEnabled = false; b.giveServerIdentity.isEnabled = false
+        IdentityExchange.fetch(this, prefs) { id ->
+            serverIdentity = id
+            b.serverIdentityInfo.text = IdentityExchange.describe(this, prefs, id)
+            b.useServerIdentity.isEnabled = id != null && id.udn != prefs.udn
+            b.giveServerIdentity.isEnabled = id != null && id.udn != prefs.udn
+        }
+    }
+
     private fun saveIdentity(): Boolean {
         val error = prefs.saveIdentity(prefs.udn, b.serverName.text?.toString())
         b.serverNameLayout.error = error
@@ -78,6 +103,7 @@ class WizardActivity : AppCompatActivity() {
         b.stepLabel.text = getString(R.string.wizard_step, s + 1, 3)
         b.back.setText(if (s == 0) R.string.wizard_skip else R.string.wizard_back)
         b.next.setText(if (s == 2) R.string.wizard_finish else R.string.wizard_next)
+        if (s == 2) showServerIdentity()
         if (s == 1) {
             b.folderGroup.visibility = if (prefs.mode.usesPhone) View.VISIBLE else View.GONE
             b.serverGroup.visibility = if (prefs.mode.usesServer) View.VISIBLE else View.GONE

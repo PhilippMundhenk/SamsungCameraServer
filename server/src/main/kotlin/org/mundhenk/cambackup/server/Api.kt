@@ -29,14 +29,18 @@ import java.time.Instant
  */
 class Api(
     private val config: Config,
-    private val identity: ServerIdentity,
+    @Volatile var identity: ServerIdentity,
     private val sink: ServerSink,
     private val ledger: Ledger,
     private val tools: Tools,
     private val stats: () -> ServerStats?,
     private val log: (String) -> Unit,
+    private val devices: Devices? = null,
 ) : HttpHandler {
     private val startedAt = Instant.now()
+
+    /** Set by CamBackupServer: adopts a new identity (config, pairing file, UPnP side) and returns the effective one. */
+    @Volatile var onIdentityChange: ((ServerIdentity) -> ServerIdentity)? = null
 
     override fun handle(req: HttpRequest): HttpResponse {
         val path = req.path
@@ -44,6 +48,8 @@ class Api(
             path.startsWith("/api/v1/files/") -> authed(req) { files(req, path.removePrefix("/api/v1/files/")) }
             path == "/api/v1/events" && req.method == "POST" -> authed(req) { events(req) }
             path == "/api/v1/status" && req.method == "GET" -> json(statusJson())
+            path == "/api/v1/identity" && req.method == "POST" -> authed(req) { adoptIdentity(req) }
+            path == "/api/v1/identity" && req.method == "GET" -> json(identityJson(identity))
             path == "/api/v1/log" && req.method == "GET" -> text(ServerLog.snapshot().joinToString("\n"))
             path == "/health" -> text("ok")
             config.uiEnabled && path == "/" && req.method == "GET" -> html(StatusPage.render(this.statusModel(), req.query["scheme"]))
@@ -112,6 +118,7 @@ class Api(
         if (parts.size != 2 || parts.any { it.isBlank() || it == "." || it == ".." }) return HttpResponse(400, "expected /api/v1/files/{date}/{name}".toByteArray(), "text/plain")
         val (date, name) = parts
         val camera = req.header("x-nx-camera") ?: req.remoteAddress
+        if (req.method != "HEAD") req.header("x-nx-device")?.let { devices?.seen(Devices.Kind.PHONE, it, req.remoteAddress, req.header("user-agent"), files = 1) }
         val file = IncomingFile(
             name = name, date = date, size = req.contentLength,
             mimeType = req.header("content-type") ?: "application/octet-stream",
@@ -134,11 +141,29 @@ class Api(
         }
     }
 
+    private fun identityJson(id: ServerIdentity) = "{\"udn\":" + Json.str(id.udn) + ",\"name\":" + Json.str(id.friendlyName) + ",\"mac\":" + Json.str(id.macAddr) + "}"
+
+    /** The phone hands its identity over so one pairing file works for both; the server restarts its UPnP side with it. */
+    private fun adoptIdentity(req: HttpRequest): HttpResponse {
+        val body = req.readBodyText()
+        val udn = Json.field(body, "udn")?.removePrefix("uuid:")?.lowercase() ?: return HttpResponse(400, "missing udn".toByteArray(), "text/plain")
+        val name = Json.field(body, "name")?.takeIf { it.isNotBlank() } ?: identity.friendlyName
+        val mac = Json.field(body, "mac") ?: identity.macAddr
+        val wanted = try { ServerIdentity(udn, name, mac) } catch (e: IllegalArgumentException) { return HttpResponse(400, (e.message ?: "invalid identity").toByteArray(), "text/plain") }
+        val device = req.header("x-nx-device") ?: req.remoteAddress
+        if (wanted == identity) { log("Identity from $device already in use"); return json(identityJson(identity)) }
+        val applied = onIdentityChange?.invoke(wanted) ?: return HttpResponse(503, "identity changes not supported".toByteArray(), "text/plain")
+        log("Identity adopted from $device: ${applied.friendlyName} uuid:${applied.udn} (was uuid:${identity.udn})")
+        identity = applied
+        return json(identityJson(applied))
+    }
+
     private fun events(req: HttpRequest): HttpResponse {
         val body = req.readBodyText()
         val type = Json.field(body, "type") ?: return HttpResponse(400, "missing type".toByteArray(), "text/plain")
         val camera = Json.field(body, "camera") ?: req.remoteAddress
         val sysOff = Json.field(body, "sysOff") == "true"
+        req.header("x-nx-device")?.let { devices?.seen(Devices.Kind.PHONE, it, req.remoteAddress, req.header("user-agent"), session = type == "start") }
         when (type) {
             "start" -> { stats()?.let { it.sessions.incrementAndGet(); it.lastCamera = camera }; log("Backup session started (via phone ${req.remoteAddress}, camera $camera)"); sink.onBackupStart(camera) }
             "done" -> { log("Backup session finished (via phone ${req.remoteAddress}, camera $camera)"); sink.onBackupDone(camera, sysOff) }
@@ -153,11 +178,13 @@ class Api(
         val identity: ServerIdentity, val port: Int, val uptime: Duration, val stats: ServerStats?,
         val ledgerSize: Int, val recent: List<Ledger.Entry>, val sessions: Map<String, Session>,
         val config: List<Pair<String, String>>, val tools: Map<String, Boolean>, val log: List<String>, val dataDir: String,
+        val devices: List<Devices.Device> = emptyList(),
     )
 
     fun statusModel() = StatusModel(
         identity, config.httpPort, Duration.between(startedAt, Instant.now()), stats(),
         ledger.size(), ledger.recent(30), sink.activeSessions(), config.summary(), tools.status(), ServerLog.snapshot().takeLast(60), config.dataDir.absolutePath,
+        devices?.all() ?: emptyList(),
     )
 
     private fun statusJson(): String {
@@ -224,6 +251,18 @@ object StatusPage {
         else {
             sb.append("<table class=\"files\">")
             for (e in m.recent) sb.append("<tr><td class=\"check\" title=\"on the server\">&#10003;&#10003;</td><td><div class=\"name\">${esc(e.name)}</div><div class=\"help\">${esc(e.date)} &middot; ${mb(e.size)} &middot; ${esc(java.time.Instant.ofEpochMilli(e.receivedAt).atZone(java.time.ZoneId.systemDefault()).toLocalDateTime().withNano(0).toString().replace('T', ' '))}</div><div class=\"help\">On the server &middot; <code>${esc(e.path)}</code></div></td></tr>")
+            sb.append("</table>")
+        }
+        sb.append("<h2>Devices</h2>")
+        if (m.devices.isEmpty()) sb.append("<p class=\"help\">No camera or phone has talked to this server yet. This server: <code>uuid:${esc(m.identity.udn)}</code>; the app offers \"Use the server's identity\" so phone and server share one pairing file.</p>")
+        else {
+            sb.append("<table class=\"files\">")
+            for (d in m.devices) {
+                val kind = if (d.kind == Devices.Kind.CAMERA) "Camera" else "Phone"
+                sb.append("<tr><td class=\"check\" title=\"$kind\">${if (d.kind == Devices.Kind.CAMERA) "&#128247;" else "&#128241;"}</td><td><div class=\"name\">${esc(d.id)}</div>")
+                sb.append("<div class=\"help\">$kind &middot; ${d.sessions} session${if (d.sessions == 1) "" else "s"} &middot; ${d.files} file${if (d.files == 1) "" else "s"} &middot; last seen ${esc(java.time.Instant.ofEpochMilli(d.lastSeen).atZone(java.time.ZoneId.systemDefault()).toLocalDateTime().withNano(0).toString().replace('T', ' '))}</div>")
+                sb.append("<div class=\"help\">${esc(d.address)}${if (d.detail.isNotEmpty()) " &middot; " + esc(d.detail) else ""}</div></td></tr>")
+            }
             sb.append("</table>")
         }
         if (m.tools.isNotEmpty()) {

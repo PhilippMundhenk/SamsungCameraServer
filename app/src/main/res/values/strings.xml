@@ -61,7 +61,23 @@
     <string name="udn_history_title">Previous UDNs</string>
     <string name="udn_history_empty">None yet. Every UDN you replace is kept here.</string>
     <string name="udn_history_help">Tap a previous UDN to switch back to it (cards paired with it work again).</string>
-    <string name="udn_history_replaced">replaced %1$s</string>
+    <string name="udn_history_replaced">replaced %1$s · %2$s</string>
+    <string name="udn_source">Source: %1$s</string>
+    <string name="udn_source_server">from server %1$s (%2$s)</string>
+    <string name="udn_shared_with_server">Shared with the server %1$s: one pairing file works for both.</string>
+    <string name="udn_differs_from_server">The server %1$s uses a different UDN (%2$s). Cards paired with one of them do not reach the other.</string>
+    <string name="udn_server_unknown">Server %1$s not reachable; its identity could not be read.</string>
+    <string name="udn_server_checking">Asking the server for its identity…</string>
+    <string name="use_server_identity">Use the server\'s identity</string>
+    <string name="give_server_identity">Give the server this identity</string>
+    <string name="use_server_identity_title">Use the server\'s identity on this phone?</string>
+    <string name="use_server_identity_message">This phone will advertise the server\'s UDN %1$s and name \"%2$s\". Cards paired with the server then also work with this phone. Cards paired with this phone\'s current UDN stop working until you export the pairing file again; the current UDN stays in the history.</string>
+    <string name="give_server_identity_title">Give the server this phone\'s identity?</string>
+    <string name="give_server_identity_message">The server %1$s will switch to this phone\'s UDN %2$s and name \"%3$s\" and restart its camera side. Cards paired with this phone then also work with the server; cards paired with the server\'s old UDN stop working with it.</string>
+    <string name="identity_adopted">Identity taken over from the server</string>
+    <string name="identity_given">Server switched to this phone\'s identity</string>
+    <string name="identity_exchange_failed">Could not exchange the identity with the server (see log)</string>
+    <string name="device_nickname_hint">Name of this phone (shown on the server)</string>
 
     <!-- wizard -->
     <string name="wizard_title">Welcome to Samsung Camera Backup</string>

@@ -21,6 +21,11 @@ All notable changes to this project are documented here. The format follows
   switched back to.
 
 ### Added
+- Device management (#22): the app shows whether it shares the server's identity and can take
+  the server's UDN or hand its own to the server (`GET`/`POST /api/v1/identity`; the server
+  rewrites its pairing file and restarts its camera side live). The UDN history records where
+  each identity came from; the phone has a nickname that the server's new **Devices** list
+  shows next to the cameras it has seen.
 - Server: a settings page at `/settings` edits `cambackup.conf` from the browser (environment
   values read-only with a badge and a "copy into the file" button, restart markers, protected
   by `api.token` as HTTP Basic password). The status page now shows the same status card as the

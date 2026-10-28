@@ -21,6 +21,7 @@ class ServerSink(
     private val pipeline: Pipeline,
     private val log: (String) -> Unit,
     private val layout: () -> String = { org.mundhenk.cambackup.core.Layout.DEFAULT },
+    private val devices: Devices? = null,
 ) : BackupSink {
     private val sessions = ConcurrentHashMap<String, Session>()
 
@@ -29,6 +30,7 @@ class ServerSink(
 
     override fun onBackupStart(cameraAddress: String) {
         sessions[cameraAddress] = Session(cameraAddress)
+        devices?.seen(Devices.Kind.CAMERA, cameraAddress, cameraAddress, session = true)
     }
 
     override fun exists(file: IncomingFile): Boolean {
@@ -73,6 +75,7 @@ class ServerSink(
 
     override fun onBackupDone(cameraAddress: String, sysOff: Boolean) {
         val session = sessions.remove(cameraAddress) ?: Session(cameraAddress)
+        devices?.seen(Devices.Kind.CAMERA, cameraAddress, cameraAddress, files = session.stored)
         log("Session from $cameraAddress: ${session.stored} stored, ${session.skipped} skipped" + if (sysOff) ", camera asks for shutdown" else "")
         pipeline.submitSessionDone(session, sysOff)
     }

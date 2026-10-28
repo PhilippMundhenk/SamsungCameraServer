@@ -152,6 +152,68 @@ class SettingsAndWizardTest {
         assertEquals("[PC]Phone", prefs.serverName)
     }
 
+    /** Identity exchange with the home server, both directions, from Settings and from the wizard. */
+    @Test
+    fun identityIsSharedWithTheServerInBothDirections() {
+        val backend = TestSupport.FakeBackend("tok").start()
+        try {
+            val prefs = Prefs(context)
+            prefs.mode = Mode.PHONE_AND_SERVER; prefs.backendUrl = backend.url; prefs.backendToken = "tok"; prefs.deviceNickname = "Test Phone"
+            val mine = prefs.udn
+            ActivityScenario.launch(SettingsActivity::class.java).use {
+                waitForUi { onView(withId(R.id.serverIdentityInfo)).check(matches(withSubstring("uses a different UDN"))) }
+                onView(withId(R.id.udnSource)).check(matches(withSubstring("generated on this phone")))
+                assertTrue(backend.deviceNames.contains("Test Phone"))
+                // take the server's identity: cancel, then confirm
+                onView(withId(R.id.useServerIdentity)).perform(scrollTo(), tap())
+                onView(withText(R.string.cancel)).inRoot(isDialog()).perform(tap())
+                assertEquals(mine, prefs.udn)
+                onView(withId(R.id.useServerIdentity)).perform(scrollTo(), tap())
+                onView(withText(R.string.use_server_identity)).inRoot(isDialog()).perform(tap())
+                waitFor { prefs.udn == backend.identity.udn }
+                assertEquals("[PC]FakeHome", prefs.serverName)
+                assertEquals(listOf(mine), prefs.udnHistory.map { it.udn })
+                assertTrue(prefs.udnSource.startsWith("from server [PC]FakeHome"))
+                waitForUi { onView(withId(R.id.serverIdentityInfo)).check(matches(withSubstring("Shared with the server"))) }
+                onView(withId(R.id.udnSource)).check(matches(withSubstring("from server [PC]FakeHome")))
+                onView(withId(R.id.useServerIdentity)).check(matches(not(isEnabled())))
+                // generate a new one, then give it to the server
+                onView(withId(R.id.regenerate)).perform(scrollTo(), tap())
+                onView(withText(R.string.udn_new_confirm)).inRoot(isDialog()).perform(tap())
+                val fresh = prefs.udn
+                assertNotEquals(backend.identity.udn, fresh)
+                waitForUi { onView(withId(R.id.giveServerIdentity)).check(matches(isEnabled())) }
+                onView(withId(R.id.giveServerIdentity)).perform(scrollTo(), tap())
+                onView(withText(R.string.cancel)).inRoot(isDialog()).perform(tap())
+                assertNotEquals(fresh, backend.identity.udn)
+                onView(withId(R.id.giveServerIdentity)).perform(scrollTo(), tap())
+                onView(withText(R.string.give_server_identity)).inRoot(isDialog()).perform(tap())
+                waitFor { backend.identity.udn == fresh }
+                assertEquals(prefs.serverName, backend.identity.friendlyName)
+                waitForUi { onView(withId(R.id.serverIdentityInfo)).check(matches(withSubstring("Shared with the server"))) }
+                assertTrue(LogBus.snapshot().any { it.contains("now uses this phone's identity") })
+            }
+            // the wizard offers the same on its pairing step, without an extra dialog for "use"
+            backend.identity = org.mundhenk.cambackup.core.ServerIdentity("4a682b0b-0361-dbae-6155-00000000f00d", "[PC]Wizard", org.mundhenk.cambackup.core.ServerIdentity.DEFAULT_MAC)
+            prefs.setupDone = false
+            ActivityScenario.launch(WizardActivity::class.java).use {
+                waitForUi { onView(withId(R.id.next)).perform(tap()) }
+                onView(withId(R.id.next)).perform(tap())
+                onView(withId(R.id.stepLabel)).check(matches(withText("Step 3 of 3")))
+                waitForUi { onView(withId(R.id.serverIdentityInfo)).check(matches(withSubstring("[PC]Wizard"))) }
+                onView(withId(R.id.useServerIdentity)).perform(scrollTo(), tap())
+                waitFor { prefs.udn == "4a682b0b-0361-dbae-6155-00000000f00d" }
+                assertEquals("[PC]Wizard", prefs.serverName)
+                waitForUi { onView(withId(R.id.serverIdentityInfo)).check(matches(withSubstring("Shared with the server"))) }
+                // unreachable server: explained, buttons disabled
+                backend.serveIdentity = false
+                onView(withId(R.id.back)).perform(tap()); onView(withId(R.id.next)).perform(tap())
+                waitForUi { onView(withId(R.id.serverIdentityInfo)).check(matches(withSubstring("not reachable"))) }
+                onView(withId(R.id.useServerIdentity)).check(matches(not(isEnabled())))
+            }
+        } finally { backend.stop() }
+    }
+
     @Test
     fun settingsAreLockedWhileTheServerRuns() {
         BackupService.start(context); waitFor { BackupService.running }

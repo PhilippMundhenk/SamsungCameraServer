@@ -132,7 +132,14 @@ PUT  {base}/api/v1/files/{date}/{name}   body = raw bytes 201 = stored, 200 = al
      headers: Content-Type, Content-Length (or chunked), X-NX-Camera (camera IP), X-NX-Class
 POST {base}/api/v1/events  {"type":"start"|"done","camera":"<ip>","sysOff":true|false}  204
 GET  {base}/api/v1/status  JSON   ·   GET {base}/api/v1/log   ·   GET {base}/health
+GET  {base}/api/v1/identity                               {"udn","name","mac"} (public, what the app imports)
+POST {base}/api/v1/identity  {"udn","name"}               server adopts the identity: config file, pairing file,
+                                                          UPnP side restarted on the same port (token required)
 ```
+
+Every request from the app carries `X-NX-Device: <phone nickname>`; the status page lists the
+devices it has seen (cameras by address, phones by nickname, with sessions, files and last
+activity) under **Devices**, persisted in `devices.tsv`.
 
 `{date}` is the camera's `dc:date` (YYYY-MM-DD), `{name}` the original file name. With
 `api.token` set, `/api/v1/files` and `/api/v1/events` require `Authorization: Bearer <token>`

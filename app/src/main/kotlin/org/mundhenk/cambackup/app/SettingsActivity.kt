@@ -49,12 +49,41 @@ class SettingsActivity : AppCompatActivity() {
                 val fresh = prefs.regenerateUdn()
                 b.udn.setText(fresh)
                 LogBus.log("New UDN uuid:$fresh (previous one kept in the history)")
-                showUdnHistory()
+                showUdnHistory(); showServerIdentity()
             }
         }
         b.exportPairing.setOnClickListener { if (save()) savePairing.launch("SAMSUNGAutoBackupDESC.zip") }
         b.showWizard.setOnClickListener { startActivity(Intent(this, WizardActivity::class.java)) }
+        b.deviceNickname.setText(prefs.deviceNickname)
+        b.useServerIdentity.setOnClickListener {
+            val server = serverIdentity ?: return@setOnClickListener
+            if (!save()) return@setOnClickListener
+            IdentityExchange.adoptFromServer(this, prefs, server, confirm = true) { b.udn.setText(prefs.udn); b.serverName.setText(prefs.serverName); showUdnHistory(); showServerIdentity() }
+        }
+        b.giveServerIdentity.setOnClickListener {
+            if (!save()) return@setOnClickListener
+            IdentityExchange.giveToServer(this, prefs, confirm = true) { showServerIdentity() }
+        }
         showUdnHistory()
+    }
+
+    private var serverIdentity: org.mundhenk.cambackup.core.ServerIdentity? = null
+
+    /** Compares this phone's identity with the server's (server modes only) and offers both directions. */
+    private fun showServerIdentity() {
+        b.udnSource.text = IdentityExchange.sourceLabel(this, prefs)
+        val show = prefs.mode.usesServer && prefs.backendUrl.isNotBlank()
+        b.identityExchange.visibility = if (show) View.VISIBLE else View.GONE
+        if (!show) return
+        b.serverIdentityInfo.setText(R.string.udn_server_checking)
+        b.useServerIdentity.isEnabled = false; b.giveServerIdentity.isEnabled = false
+        IdentityExchange.fetch(this, prefs) { id ->
+            serverIdentity = id
+            b.serverIdentityInfo.text = IdentityExchange.describe(this, prefs, id)
+            val locked = BackupService.running
+            b.useServerIdentity.isEnabled = id != null && id.udn != prefs.udn && !locked
+            b.giveServerIdentity.isEnabled = id != null && id.udn != prefs.udn && !locked
+        }
     }
 
     /** Previous UDNs, newest first; tapping one switches back to it (after a warning). */
@@ -65,14 +94,14 @@ class SettingsActivity : AppCompatActivity() {
         for (entry in history) {
             val row = layoutInflater.inflate(R.layout.item_udn_history, b.udnHistory, false)
             row.findViewById<android.widget.TextView>(R.id.historyUdn).text = entry.udn
-            row.findViewById<android.widget.TextView>(R.id.historyDate).text = getString(R.string.udn_history_replaced, Ui.formatTime(entry.replacedAt))
+            row.findViewById<android.widget.TextView>(R.id.historyDate).text = getString(R.string.udn_history_replaced, Ui.formatTime(entry.replacedAt), entry.source.ifBlank { Prefs.SOURCE_GENERATED })
             row.isEnabled = !BackupService.running
             row.setOnClickListener {
                 Ui.confirmRestoreUdn(this, entry.udn) {
                     prefs.switchUdn(entry.udn)
                     b.udn.setText(entry.udn)
                     LogBus.log("Switched back to UDN uuid:${entry.udn}")
-                    showUdnHistory()
+                    showUdnHistory(); showServerIdentity()
                 }
             }
             b.udnHistory.addView(row)
@@ -83,8 +112,9 @@ class SettingsActivity : AppCompatActivity() {
         super.onResume()
         val locked = BackupService.running
         b.lockedNotice.visibility = if (locked) View.VISIBLE else View.GONE
-        for (v in listOf(b.modePhone, b.modePhoneAndServer, b.modeServer, b.chooseFolder, b.resetFolder, b.backendUrl, b.backendToken, b.serverName, b.udn, b.regenerate)) v.isEnabled = !locked
+        for (v in listOf(b.modePhone, b.modePhoneAndServer, b.modeServer, b.chooseFolder, b.resetFolder, b.backendUrl, b.backendToken, b.serverName, b.udn, b.regenerate, b.deviceNickname)) v.isEnabled = !locked
         showUdnHistory()
+        showServerIdentity()
     }
 
     override fun onPause() {
@@ -96,6 +126,7 @@ class SettingsActivity : AppCompatActivity() {
     private fun save(): Boolean {
         prefs.backendUrl = b.backendUrl.text?.toString() ?: ""
         prefs.backendToken = b.backendToken.text?.toString() ?: ""
+        prefs.deviceNickname = b.deviceNickname.text?.toString() ?: ""
         val error = prefs.saveIdentity(b.udn.text?.toString(), b.serverName.text?.toString())
         if (error != null) { b.udn.error = error; return false }
         b.udn.error = null

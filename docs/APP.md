@@ -26,6 +26,15 @@ unzip it into the SD card root. The UDN is generated once and kept. Put the same
 home server (`server.udn`) so one card works with both targets. Export again after formatting
 the card.
 
+**Sharing the identity with the home server.** Phone and server are meant to advertise the
+same UDN, so one SD card works at home and on the road. In the server modes, Settings (and the
+wizard's pairing step) show whether the two match and offer both directions: *Use the server's
+identity* takes the server's UDN and name onto the phone; *Give the server this identity* makes
+the server switch to the phone's (it rewrites its pairing file and restarts its camera side,
+no container restart needed). Start with whichever device you paired first. Under the UDN the
+app shows where it came from; the phone's nickname ("Name of this phone") is what the server's
+device list shows.
+
 **Changing the UDN** ("New UDN", or editing the field) cuts off every camera paired with the
 current one, so the app asks for confirmation and explains that first. Every replaced UDN is
 kept under *Previous UDNs* in Settings; tap one to switch back to it (again with a warning),

@@ -21,10 +21,53 @@ class BackendSink(
     private val log: (String) -> Unit = {},
     private val token: String = "",
     private val connectTimeoutMs: Int = 5000,
+    /** Nickname of this device, sent as X-NX-Device so the server can list who talks to it. */
+    private val deviceName: String = "",
 ) : BackupSink {
     private val baseUrl = baseUrl.trim().trimEnd('/')
 
-    private fun HttpURLConnection.auth() { if (token.isNotBlank()) setRequestProperty("Authorization", "Bearer $token") }
+    private fun HttpURLConnection.auth() {
+        if (token.isNotBlank()) setRequestProperty("Authorization", "Bearer $token")
+        if (deviceName.isNotBlank()) setRequestProperty("X-NX-Device", deviceName.replace(Regex("[\\r\\n]"), " ").take(80))
+    }
+
+    /** The server's identity from GET /api/v1/identity, so a phone can advertise the same UDN. Null when unreachable. */
+    fun fetchIdentity(): ServerIdentity? = try {
+        val c = URL("$baseUrl/api/v1/identity").openConnection() as HttpURLConnection
+        c.requestMethod = "GET"; c.connectTimeout = connectTimeoutMs; c.readTimeout = 5000; c.auth()
+        val code = c.responseCode
+        val body = (if (code < 400) c.inputStream else c.errorStream)?.use { it.readBytes().toString(Charsets.UTF_8) } ?: ""
+        c.disconnect()
+        if (code != 200) { log("backend identity -> HTTP $code"); null }
+        else {
+            val udn = jsonField(body, "udn"); val name = jsonField(body, "name")
+            if (udn == null || name == null) { log("backend identity: unexpected answer $body"); null }
+            else ServerIdentity(udn.removePrefix("uuid:").lowercase(), name, jsonField(body, "mac") ?: ServerIdentity.DEFAULT_MAC)
+        }
+    } catch (e: IOException) { log("backend identity failed: ${e.message}"); null }
+      catch (e: IllegalArgumentException) { log("backend identity invalid: ${e.message}"); null }
+
+    /**
+     * Asks the server to adopt [identity] (POST /api/v1/identity, needs the token). The server
+     * rewrites its pairing file and restarts its UPnP side with the new UDN. Returns the identity
+     * the server reports afterwards, null on failure (logged).
+     */
+    fun pushIdentity(identity: ServerIdentity): ServerIdentity? = try {
+        val c = URL("$baseUrl/api/v1/identity").openConnection() as HttpURLConnection
+        c.requestMethod = "POST"; c.doOutput = true; c.connectTimeout = connectTimeoutMs; c.readTimeout = 15_000; c.auth()
+        c.setRequestProperty("Content-Type", "application/json")
+        c.outputStream.use { it.write("""{"udn":"${identity.udn}","name":${jsonString(identity.friendlyName)},"mac":"${identity.macAddr}"}""".toByteArray()) }
+        val code = c.responseCode
+        val body = (if (code < 400) c.inputStream else c.errorStream)?.use { it.readBytes().toString(Charsets.UTF_8) } ?: ""
+        c.disconnect()
+        if (code != 200) { log("backend identity push -> HTTP $code ${body.take(200)}"); null }
+        else { val udn = jsonField(body, "udn"); val name = jsonField(body, "name"); if (udn != null && name != null) ServerIdentity(udn.removePrefix("uuid:").lowercase(), name, jsonField(body, "mac") ?: identity.macAddr) else null }
+    } catch (e: IOException) { log("backend identity push failed: ${e.message}"); null }
+
+    private fun jsonString(s: String): String = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
+    private fun jsonField(json: String, name: String): String? =
+        Regex("\"" + Regex.escape(name) + "\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"").find(json)?.groupValues?.get(1)?.replace("\\\"", "\"")?.replace("\\\\", "\\")
 
     private fun fileUrl(file: IncomingFile): URL {
         val d = URLEncoder.encode(FileSystemSink.safeSegment(file.date), "UTF-8")
