@@ -57,7 +57,7 @@ object SettingsCatalog {
     val sections: List<String> = all.map { it.section }.distinct()
     /** What a camera may have its own value for: the folder layout, every pipeline stage and the hooks (not tool locations). */
     val perCamera: List<SettingDef> = all.filter { (it.key == "storage.subfolder" || it.section == "Pipeline" || it.section == "Hooks") && it.key !in setOf("exif.tool", "tools.path") }
-    private val cameraKey = Regex("^camera\\.([A-Za-z0-9_-]+)\\.(.+)$")
+    private val cameraKey = Regex("^(?:camera|user)\\.([A-Za-z0-9_-]+)\\.(.+)$")
     fun byKey(key: String): SettingDef? = all.firstOrNull { it.key == key }
 
     /** application/x-www-form-urlencoded body -> key/value pairs (last wins). */
@@ -101,7 +101,7 @@ object SettingsCatalog {
             val v = raw.trim()
             when (def.type) {
                 SettingDef.Type.BOOL -> if (v == "" || v == "true" || v == "false") updates[k] = v
-                SettingDef.Type.NUMBER -> if (v.isEmpty() || v.toIntOrNull() != null) updates[k] = v else errors += "${def.label} (camera ${m.groupValues[1].replace('_', '.')}): '$v' is not a number"
+                SettingDef.Type.NUMBER -> if (v.isEmpty() || v.toIntOrNull() != null) updates[k] = v else errors += "${def.label} (${if (k.startsWith("user.")) "user " + m.groupValues[1] else "camera " + m.groupValues[1].replace('_', '.')}): '$v' is not a number"
                 else -> updates[k] = v
             }
         }
@@ -113,7 +113,7 @@ object SettingsCatalog {
 object SettingsPage {
     private fun esc(s: String) = UpnpXml.escape(s)
 
-    fun render(config: Config, notice: String? = null, errors: List<String> = emptyList(), scheme: String? = null, cameras: List<Devices.Device> = emptyList()): String {
+    fun render(config: Config, notice: String? = null, errors: List<String> = emptyList(), scheme: String? = null, cameras: List<Devices.Device> = emptyList(), users: List<UserServers.UserServer> = emptyList()): String {
         val sb = StringBuilder()
         sb.append(Html.head("Settings", scheme = scheme))
         sb.append(Html.header("settings"))
@@ -140,17 +140,40 @@ object SettingsPage {
         for (cam in cameras) {
             val id = Config.cameraId(cam.id)
             sb.append("<h3>${esc(cam.displayName)}${if (cam.nickname.isNotEmpty()) " <code>${esc(cam.id)}</code>" else ""}</h3><table class=\"settings\">")
-            for (def in SettingsCatalog.perCamera) sb.append(cameraRow(config, def, id))
+            for (def in SettingsCatalog.perCamera) sb.append(scopedRow(config, def, "${Config.CAMERA_PREFIX}$id."))
             sb.append("</table>")
         }
+        if (users.isNotEmpty()) {
+            sb.append("<h2>Per user</h2><div class=\"help\">Overrides for a user's files, whichever camera sent them; a camera's own settings above win over these. Exports go to <code>&lt;export.dir&gt;/&lt;user&gt;</code> unless the user has an export directory here.</div>")
+            for (u in users) {
+                sb.append("<h3>${esc(u.identity.friendlyName)} <code>${esc(u.name)}</code></h3><table class=\"settings\">")
+                for (def in SettingsCatalog.perCamera) sb.append(scopedRow(config, def, "${Config.USER_PREFIX}${u.name}."))
+                sb.append("</table>")
+            }
+        }
         sb.append("<p><button class=\"btn\" type=\"submit\">Save</button> <a class=\"btn secondary\" href=\"/\">Back to status</a></p></form>")
+        // users are managed with their own small forms (a form cannot nest in the big one)
+        sb.append("<h2 id=\"users\">Users</h2>")
+        sb.append("<div class=\"help\">Several people on one server: every user gets an identity of their own (the name the camera shows, a UDN, a port), a folder <code>${esc(config.storageDir.path)}/&lt;user&gt;</code> and a pairing file for their SD cards. Cameras are told apart by the pairing file they carry. The general identity above keeps working as before.</div>")
+        if (users.isEmpty()) sb.append("<p class=\"help\">No users yet.</p>")
+        else {
+            sb.append("<table class=\"settings\">")
+            for (u in users) {
+                sb.append("<tr><td class=\"k\"><code>${esc(u.name)}</code></td><td>${esc(u.identity.friendlyName)} &middot; <code>uuid:${esc(u.identity.udn)}</code> &middot; port ${u.port}<br>")
+                sb.append("<a href=\"/pairing.zip?user=${esc(u.name)}\">Pairing zip</a> &middot; <a href=\"/SAMSUNGAutoBackupDESC.ini?user=${esc(u.name)}\">.ini</a> &middot; <code>user.${esc(u.name)}.udn</code> / <code>.name</code> / <code>.port</code> in the file")
+                sb.append("<form method=\"post\" action=\"/settings/users/remove\" class=\"rename\"><input type=\"hidden\" name=\"name\" value=\"${esc(u.name)}\"><button class=\"btn secondary\" type=\"submit\">Remove user (files stay)</button></form></td></tr>")
+            }
+            sb.append("</table>")
+        }
+        sb.append("<form method=\"post\" action=\"/settings/users\" class=\"rename\"><input type=\"text\" name=\"name\" maxlength=\"32\" placeholder=\"user name, e.g. alice\" pattern=\"[A-Za-z0-9_-]+\" required> <input type=\"text\" name=\"shown\" maxlength=\"40\" placeholder=\"shown on the camera, e.g. [PC]Alice\"> <button class=\"btn\" type=\"submit\">Add user</button></form>")
+        sb.append("<div class=\"help\">The user's server starts right away; the port is the next free one after the general port (change <code>user.&lt;name&gt;.port</code> if it is taken). Unzip the user's pairing zip onto their SD card.</div>")
         sb.append(Html.footer())
         return sb.toString()
     }
 
-    /** One per-camera field: the file's override or empty (inherit), with the general value as a hint. */
-    private fun cameraRow(config: Config, def: SettingDef, cameraId: String): String {
-        val key = "${Config.CAMERA_PREFIX}$cameraId.${def.key}"
+    /** One scoped field (per camera or per user): the file's override or empty (inherit), with the general value as a hint. */
+    private fun scopedRow(config: Config, def: SettingDef, prefix: String): String {
+        val key = prefix + def.key
         val value = config.fileValue(key) ?: ""
         val general = config[def.key] ?: ""
         val sb = StringBuilder("<tr><td class=\"k\"><label for=\"${esc(key)}\">${esc(def.label)}</label><br><code>${esc(def.key)}</code></td><td>")

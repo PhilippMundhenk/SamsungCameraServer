@@ -71,6 +71,8 @@ class CamBackupServer private constructor(
     val devices: Devices,
     private val api: Api,
     private val log: (String) -> Unit,
+    /** The per-user camera-facing servers (multi-user, #20). */
+    val users: UserServers,
 ) {
     @Volatile var identity: ServerIdentity = identity
         private set
@@ -78,6 +80,7 @@ class CamBackupServer private constructor(
     val port: Int get() = backup.boundPort
 
     fun stop() {
+        users.stopAll()
         backup.stop()
         pipeline.shutdown()
     }
@@ -117,10 +120,13 @@ class CamBackupServer private constructor(
             )
             backupRef.set(backup)
             backup.start()
+            val users = UserServers(config, pipeline, devices, dataDir, log, portOverride = httpPortOverride?.takeIf { it == 0 })
+            users.sync()
+            api.users = users
             log("Config: ${File(dataDir, Config.FILE_NAME)} | storage: ${config.storageDir}${File.separator}${config.storageSubfolder.ifEmpty { "(flat)" }} | web UI: http://<host>:${backup.boundPort}/")
             log("Pairing file for the SD card: http://<host>:${backup.boundPort}/pairing.zip  (UDN uuid:${identity.udn})")
             if (config.apiToken == null) log("api.token is empty: the backend API accepts uploads from anyone on the network")
-            return CamBackupServer(config, identity, ledger, pipeline, sink, backup, devices, api, log).also { server ->
+            return CamBackupServer(config, identity, ledger, pipeline, sink, backup, devices, api, log, users).also { server ->
                 api.onIdentityChange = { wanted -> server.applyIdentity(wanted) }
             }
         }

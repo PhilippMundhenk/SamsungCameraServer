@@ -237,7 +237,7 @@ class PipelineTest {
             p.submitSessionDone(s, sysOff = false); p.awaitIdle()
             assertEquals(1, received.size)
             val body = received[0]
-            assertTrue(body, body.startsWith("Bearer wt|{\"event\":\"done\",\"camera\":\"10.0.0.9\",\"sysOff\":false,\"stored\":1,\"skipped\":2"))
+            assertTrue(body, body.startsWith("Bearer wt|{\"event\":\"done\",\"camera\":\"10.0.0.9\",\"user\":\"\",\"sysOff\":false,\"stored\":1,\"skipped\":2"))
             assertTrue(body.contains("\"preview\":") && body.contains("\"error\":\"e\\\"x\""))
             TestSupport.waitFor { out.isFile }
             assertEquals(log.joinToString(" | ") + " --- " + out.readText(), "done 10.0.0.9 false 1 2", out.readLines().firstOrNull()?.trim())

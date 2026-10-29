@@ -24,6 +24,10 @@ All notable changes to this project are documented here. The format follows
   as such ("use http:// instead of https://"), the app warns under the URL field while typing,
   adds `http://` when no scheme was typed and names the reason when the server's identity
   cannot be read ("the server does not speak TLS ...", "HTTP 404").
+- Multi-user server (#20): `users=alice,bob` (or the settings page) gives each user their own
+  identity, port, folder, ledger, pairing file and settings overrides (`user.<name>.<key>`);
+  exports default to `<export.dir>/<user>`; the status page shows per-user totals; the phone
+  files uploads for a user with `X-NX-User`; `GET /api/v1/users`.
 - Resumable uploads (#18): unfinished camera uploads are spooled (`<data>/spool` on the
   server, private storage on the phone), survive restarts, are reported to the camera as
   `dlna:uploadedSize` and continued from a `Content-Range` POST; the sinks only ever see

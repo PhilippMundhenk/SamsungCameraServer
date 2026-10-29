@@ -22,6 +22,8 @@ class ServerSink(
     private val log: (String) -> Unit,
     private val layout: (camera: String) -> String = { org.mundhenk.cambackup.core.Layout.DEFAULT },
     private val devices: Devices? = null,
+    /** Multi-user: the user this sink belongs to ("" = the general server). */
+    private val user: String = "",
 ) : BackupSink {
     private val sessions = ConcurrentHashMap<String, Session>()
 
@@ -29,8 +31,8 @@ class ServerSink(
     fun activeSessions(): Map<String, Session> = sessions.toMap()
 
     override fun onBackupStart(cameraAddress: String) {
-        sessions[cameraAddress] = Session(cameraAddress)
-        devices?.seen(Devices.Kind.CAMERA, cameraAddress, cameraAddress, session = true)
+        sessions[cameraAddress] = Session(cameraAddress, user = user)
+        devices?.seen(Devices.Kind.CAMERA, cameraAddress, cameraAddress, detail = if (user.isNotEmpty()) "user $user" else null, session = true)
     }
 
     override fun exists(file: IncomingFile): Boolean {
@@ -67,14 +69,14 @@ class ServerSink(
         if (!tmp.renameTo(f)) { tmp.copyTo(f, overwrite = true); tmp.delete() }
         ledger.record(file.date, file.name, written, f)
         session.stored++
-        val pf = ProcessedFile(file.date, file.name, written, file.cameraAddress, f)
+        val pf = ProcessedFile(file.date, file.name, written, file.cameraAddress, f, user)
         synchronized(session.files) { session.files += pf }
         pipeline.submitFile(pf)
         return StoreResult.STORED
     }
 
     override fun onBackupDone(cameraAddress: String, sysOff: Boolean) {
-        val session = sessions.remove(cameraAddress) ?: Session(cameraAddress)
+        val session = sessions.remove(cameraAddress) ?: Session(cameraAddress, user = user)
         devices?.seen(Devices.Kind.CAMERA, cameraAddress, cameraAddress, files = session.stored)
         log("Session from ${cameraLabel(cameraAddress)}: ${session.stored} stored, ${session.skipped} skipped" + if (sysOff) ", camera asks for shutdown" else "")
         pipeline.submitSessionDone(session, sysOff)

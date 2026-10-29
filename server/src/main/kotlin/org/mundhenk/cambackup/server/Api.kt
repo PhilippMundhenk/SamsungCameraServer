@@ -41,6 +41,9 @@ class Api(
 ) : HttpHandler {
     private val startedAt = Instant.now()
 
+    /** The per-user servers (multi-user); set by CamBackupServer after start. */
+    @Volatile var users: UserServers? = null
+
     /** Set by CamBackupServer: adopts a new identity (config, pairing file, UPnP side) and returns the effective one. */
     @Volatile var onIdentityChange: ((ServerIdentity) -> ServerIdentity)? = null
 
@@ -51,20 +54,23 @@ class Api(
             path == "/api/v1/events" && req.method == "POST" -> authed(req) { events(req) }
             path == "/api/v1/status" && req.method == "GET" -> json(statusJson())
             path == "/api/v1/identity" && req.method == "POST" -> authed(req) { adoptIdentity(req) }
-            path == "/api/v1/identity" && req.method == "GET" -> json(identityJson(identity))
+            path == "/api/v1/identity" && req.method == "GET" -> req.query["user"]?.let { u -> users?.get(u)?.let { json(identityJson(it.identity, u)) } ?: HttpResponse.notFound() } ?: json(identityJson(identity))
+            path == "/api/v1/users" && req.method == "GET" -> json(usersJson())
             path == "/api/v1/log" && req.method == "GET" -> text(ServerLog.snapshot().joinToString("\n"))
             path == "/health" -> text("ok")
             config.uiEnabled && path == "/" && req.method == "GET" -> html(StatusPage.render(this.statusModel(), req.query["scheme"]))
             config.uiEnabled && config.uiPreviews && req.method == "GET" && path.startsWith("/thumb/") -> thumb(path.removePrefix("/thumb/"))
             config.uiEnabled && config.uiPreviews && req.method == "GET" && path.startsWith("/file/") -> file(path.removePrefix("/file/"))
-            config.uiEnabled && config.uiSettings && path == "/settings" && req.method == "GET" -> settingsAuthed(req) { html(SettingsPage.render(config, notice = req.query["saved"]?.let { "Saved. Settings marked restart take effect after a restart, everything else from the next file on." }, scheme = req.query["scheme"], cameras = cameras())) }
+            config.uiEnabled && config.uiSettings && path == "/settings" && req.method == "GET" -> settingsAuthed(req) { html(SettingsPage.render(config, notice = req.query["saved"]?.let { "Saved. Settings marked restart take effect after a restart, everything else from the next file on." }, scheme = req.query["scheme"], cameras = cameras(), users = users?.all() ?: emptyList())) }
             config.uiEnabled && config.uiSettings && path == "/settings" && req.method == "POST" -> settingsAuthed(req) { saveSettings(req) }
             config.uiEnabled && config.uiSettings && path == "/settings/adopt-env" && req.method == "POST" -> settingsAuthed(req) { adoptEnvironment() }
             config.uiEnabled && path == "/devices/rename" && req.method == "POST" -> settingsAuthed(req) { renameDevice(req) }
-            config.uiEnabled && path == "/pairing.zip" -> HttpResponse(200, PairingFile.zip(identity), "application/zip",
-                mapOf("Content-Disposition" to "attachment; filename=\"SAMSUNGAutoBackupDESC.zip\""))
-            config.uiEnabled && path.equals("/SAMSUNGAutoBackupDESC.ini", true) -> HttpResponse(200, PairingFile.render(identity).toByteArray(Charsets.US_ASCII), "text/plain",
-                mapOf("Content-Disposition" to "attachment; filename=\"SAMSUNGAutoBackupDESC.ini\""))
+            config.uiEnabled && path == "/pairing.zip" -> pairingIdentity(req)?.let { HttpResponse(200, PairingFile.zip(it), "application/zip",
+                mapOf("Content-Disposition" to "attachment; filename=\"SAMSUNGAutoBackupDESC.zip\"")) } ?: HttpResponse.notFound()
+            config.uiEnabled && path.equals("/SAMSUNGAutoBackupDESC.ini", true) -> pairingIdentity(req)?.let { HttpResponse(200, PairingFile.render(it).toByteArray(Charsets.US_ASCII), "text/plain",
+                mapOf("Content-Disposition" to "attachment; filename=\"SAMSUNGAutoBackupDESC.ini\"")) } ?: HttpResponse.notFound()
+            config.uiEnabled && config.uiSettings && path == "/settings/users" && req.method == "POST" -> settingsAuthed(req) { addUser(req) }
+            config.uiEnabled && config.uiSettings && path == "/settings/users/remove" && req.method == "POST" -> settingsAuthed(req) { removeUser(req) }
             else -> { log("Unhandled ${req.method} $path from ${req.remoteAddress}"); HttpResponse.notFound() }
         }
     }
@@ -103,7 +109,7 @@ class Api(
     private fun saveSettings(req: HttpRequest): HttpResponse {
         val form = SettingsCatalog.parseForm(req.readBodyText())
         val (updates, errors) = SettingsCatalog.updatesFrom(form)
-        if (errors.isNotEmpty()) return html(SettingsPage.render(config, errors = errors, cameras = cameras()))
+        if (errors.isNotEmpty()) return html(SettingsPage.render(config, errors = errors, cameras = cameras(), users = users?.all() ?: emptyList()))
         // keys the environment overrides are not editable in the browser; keep the file's value for them
         val editable = updates.filterKeys { config.envValue(it) == null }
         config.save(editable)
@@ -112,6 +118,50 @@ class Api(
     }
 
     private fun cameras(): List<Devices.Device> = devices?.all()?.filter { it.kind == Devices.Kind.CAMERA } ?: emptyList()
+
+    /** `?user=<name>` picks a user's identity for the pairing downloads; without it the general one; unknown user = null. */
+    private fun pairingIdentity(req: HttpRequest): ServerIdentity? {
+        val u = req.query["user"] ?: return identity
+        return users?.get(u)?.identity
+    }
+
+    private fun usersJson(): String = "[" + (users?.all() ?: emptyList()).joinToString(",") { u ->
+        "{\"name\":" + Json.str(u.name) + ",\"udn\":" + Json.str(u.identity.udn) + ",\"friendlyName\":" + Json.str(u.identity.friendlyName) + ",\"port\":" + u.port + "}"
+    } + "]"
+
+    /** The sink a phone upload belongs to: the user named in X-NX-User, or the general one; null = unknown user. */
+    private fun sinkFor(req: HttpRequest): ServerSink? {
+        val u = req.header("x-nx-user")?.trim()?.takeIf { it.isNotEmpty() } ?: return sink
+        return users?.get(u)?.sink
+    }
+
+    private fun addUser(req: HttpRequest): HttpResponse {
+        val form = SettingsCatalog.parseForm(req.readBodyText())
+        val name = Config.userName(form["name"] ?: "")
+            ?: return html(SettingsPage.render(config, errors = listOf("User name: letters, digits, '_' and '-' only (up to 32); it becomes a folder name."), cameras = cameras(), users = users?.all() ?: emptyList()))
+        val existing = config.users().map { it.name }
+        val updates = LinkedHashMap<String, String>()
+        if (name !in existing) updates["users"] = (existing + name).joinToString(",")
+        form["shown"]?.trim()?.takeIf { it.isNotEmpty() }?.let { updates["${Config.USER_PREFIX}$name.name"] = it }
+        if (updates.isNotEmpty()) config.save(updates)
+        users?.sync()
+        log("User $name ${if (name in existing) "updated" else "added"} from ${req.remoteAddress}")
+        return HttpResponse(303, ByteArray(0), "text/plain", mapOf("Location" to "/settings?saved=1#users"))
+    }
+
+    private fun removeUser(req: HttpRequest): HttpResponse {
+        val form = SettingsCatalog.parseForm(req.readBodyText())
+        val name = Config.userName(form["name"] ?: "")
+        val existing = config.users().map { it.name }
+        if (name != null && name in existing) {
+            val prefix = "${Config.USER_PREFIX}$name."
+            val cleared = (config.userOverrides(name).keys + listOf("udn", "name", "port")).associate { prefix + it to "" }
+            config.save(mapOf("users" to existing.filter { it != name }.joinToString(",")) + cleared)
+            users?.sync()
+            log("User $name removed from ${req.remoteAddress}")
+        }
+        return HttpResponse(303, ByteArray(0), "text/plain", mapOf("Location" to "/settings?saved=1#users"))
+    }
 
     private fun adoptEnvironment(): HttpResponse {
         val fromEnv = SettingsCatalog.all.mapNotNull { def -> config.envValue(def.key)?.let { def.key to it } }.toMap()
@@ -156,6 +206,7 @@ class Api(
         if (parts.size != 2 || parts.any { it.isBlank() || it == "." || it == ".." }) return HttpResponse(400, "expected /api/v1/files/{date}/{name}".toByteArray(), "text/plain")
         val (date, name) = parts
         val camera = req.header("x-nx-camera") ?: req.remoteAddress
+        val sink = sinkFor(req) ?: return HttpResponse(400, "unknown user ${req.header("x-nx-user")}".toByteArray(), "text/plain")
         if (req.method != "HEAD") req.header("x-nx-device")?.let { devices?.seen(Devices.Kind.PHONE, it, req.remoteAddress, req.header("user-agent"), files = 1) }
         val file = IncomingFile(
             name = name, date = date, size = req.contentLength,
@@ -179,7 +230,7 @@ class Api(
         }
     }
 
-    private fun identityJson(id: ServerIdentity) = "{\"udn\":" + Json.str(id.udn) + ",\"name\":" + Json.str(id.friendlyName) + ",\"mac\":" + Json.str(id.macAddr) + "}"
+    private fun identityJson(id: ServerIdentity, user: String? = null) = "{\"udn\":" + Json.str(id.udn) + ",\"name\":" + Json.str(id.friendlyName) + ",\"mac\":" + Json.str(id.macAddr) + (user?.let { ",\"user\":" + Json.str(it) } ?: "") + "}"
 
     /** The phone hands its identity over so one pairing file works for both; the server switches its UPnP side over to it live. */
     private fun adoptIdentity(req: HttpRequest): HttpResponse {
@@ -201,6 +252,7 @@ class Api(
         val type = Json.field(body, "type") ?: return HttpResponse(400, "missing type".toByteArray(), "text/plain")
         val camera = Json.field(body, "camera") ?: req.remoteAddress
         val sysOff = Json.field(body, "sysOff") == "true"
+        val sink = sinkFor(req) ?: return HttpResponse(400, "unknown user ${req.header("x-nx-user")}".toByteArray(), "text/plain")
         req.header("x-nx-device")?.let { devices?.seen(Devices.Kind.PHONE, it, req.remoteAddress, req.header("user-agent"), session = type == "start") }
         when (type) {
             "start" -> { stats()?.let { it.sessions.incrementAndGet(); it.lastCamera = camera }; log("Backup session started (via phone ${req.remoteAddress}, camera $camera)"); sink.onBackupStart(camera) }
@@ -220,6 +272,7 @@ class Api(
         val previews: Boolean = false,
         /** camera address -> its own settings (key -> value), for cameras that have any */
         val cameraOverrides: Map<String, Map<String, String>> = emptyMap(),
+        val users: List<UserServers.UserServer> = emptyList(),
     ) {
         /** A camera's given name, or its address when it has none. */
         fun deviceName(address: String): String = devices.firstOrNull { it.kind == Devices.Kind.CAMERA && it.id.equals(address, true) }?.displayName ?: address
@@ -230,6 +283,7 @@ class Api(
         ledger.size(), ledger.recent(30), sink.activeSessions(), config.summary(), tools.status(), ServerLog.snapshot().takeLast(60), config.dataDir.absolutePath,
         devices?.all() ?: emptyList(), previews = config.uiPreviews && thumbnails != null,
         cameraOverrides = cameras().associate { it.id to config.cameraOverrides(it.id) }.filterValues { it.isNotEmpty() },
+        users = users?.all() ?: emptyList(),
     )
 
     private fun statusJson(): String {
@@ -306,6 +360,16 @@ object StatusPage {
         else {
             sb.append("<table class=\"files\">")
             for (e in m.recent) sb.append("<tr><td class=\"check\" title=\"on the server\">&#10003;&#10003;</td>${if (m.previews) "<td class=\"thumb\"><a href=\"${fileUrl(e)}\"><img src=\"${thumbUrl(e)}\" alt=\"\" loading=\"lazy\" onerror=\"this.remove()\"></a></td>" else ""}<td><div class=\"name\">${if (m.previews) "<a href=\"${fileUrl(e)}\">${esc(e.name)}</a>" else esc(e.name)}</div><div class=\"help\">${esc(e.date)} &middot; ${mb(e.size)} &middot; ${esc(java.time.Instant.ofEpochMilli(e.receivedAt).atZone(java.time.ZoneId.systemDefault()).toLocalDateTime().withNano(0).toString().replace('T', ' '))}</div><div class=\"help\">On the server &middot; <code>${esc(e.path)}</code></div></td></tr>")
+            sb.append("</table>")
+        }
+        if (m.users.isNotEmpty()) {
+            sb.append("<h2>Users</h2><table class=\"files\">")
+            for (u in m.users) {
+                val st = u.backup.stats
+                sb.append("<tr><td class=\"check\" title=\"User\">&#128100;</td><td><div class=\"name\">${esc(u.identity.friendlyName)} <span class=\"help\">${esc(u.name)}</span></div>")
+                sb.append("<div class=\"help\"><code>uuid:${esc(u.identity.udn)}</code> &middot; port ${u.port} &middot; ${st.sessions.get()} session${if (st.sessions.get() == 1) "" else "s"} &middot; ${st.filesStored.get()} file${if (st.filesStored.get() == 1) "" else "s"} since start &middot; ${u.ledger.size()} in ledger</div>")
+                sb.append("<div class=\"help\"><a href=\"/pairing.zip?user=${enc(u.name)}\">Pairing zip</a> &middot; <a href=\"/SAMSUNGAutoBackupDESC.ini?user=${enc(u.name)}\">.ini</a> &middot; files under <code>${esc(cfg["storage.dir"] ?: "")}/${esc(u.name)}</code></div></td></tr>")
+            }
             sb.append("</table>")
         }
         sb.append("<h2 id=\"devices\">Devices</h2>")

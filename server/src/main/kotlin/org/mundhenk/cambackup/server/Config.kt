@@ -10,7 +10,7 @@ import java.util.Properties
  * first start so the data volume documents itself. The web UI's settings page edits the file
  * through [save]; the environment always wins over the file.
  */
-class Config(val dataDir: File, private val props: Properties, private val env: Map<String, String> = System.getenv(), private val scope: String? = null) {
+class Config(val dataDir: File, private val props: Properties, private val env: Map<String, String> = System.getenv(), private val scopes: List<String> = emptyList()) {
 
     enum class Source { ENVIRONMENT, FILE, DEFAULT }
 
@@ -18,11 +18,14 @@ class Config(val dataDir: File, private val props: Properties, private val env: 
 
     private fun envKey(key: String) = "CAMBACKUP_" + key.uppercase().replace('.', '_')
 
-    /** The effective value: a per-camera override first (when this is a [forCamera] view), then environment, then file. */
+    /** The effective value: the scope overrides of a [forCamera] / [forUser] view first (camera before user), then environment, then file. */
     operator fun get(key: String): String? {
-        if (scope != null) lookup("$CAMERA_PREFIX$scope.$key")?.let { return it }
+        for (prefix in scopes) lookup(prefix + key)?.let { return it }
         return lookup(key)
     }
+
+    /** Whether [fullKey] (a complete key, e.g. `user.alice.export.dir`) has a value anywhere. */
+    fun isSet(fullKey: String): Boolean = lookup(fullKey) != null
 
     private fun lookup(key: String): String? {
         val fromEnv = env[envKey(key)]?.trim()
@@ -35,8 +38,50 @@ class Config(val dataDir: File, private val props: Properties, private val env: 
      * dots as underscores, e.g. `camera.192_168_1_23.exif.timeshift`) overrides the general key,
      * in the file or as `CAMBACKUP_CAMERA_192_168_1_23_EXIF_TIMESHIFT`. Blank = inherit.
      */
-    fun forCamera(address: String?): Config =
-        if (address.isNullOrBlank()) this else Config(dataDir, props, env, cameraId(address))
+    fun forCamera(address: String?): Config = forCameraAndUser(address, null)
+
+    /** The settings as one user sees them: `user.<name>.<key>` overrides the general key. */
+    fun forUser(user: String?): Config = forCameraAndUser(null, user)
+
+    /** Camera overrides win over user overrides, which win over the general settings. */
+    fun forCameraAndUser(address: String?, user: String?): Config {
+        val prefixes = listOfNotNull(
+            address?.takeIf { it.isNotBlank() }?.let { "$CAMERA_PREFIX${cameraId(it)}." },
+            user?.takeIf { it.isNotBlank() }?.let { "$USER_PREFIX$it." },
+        )
+        return if (prefixes.isEmpty()) this else Config(dataDir, props, env, prefixes)
+    }
+
+    /** One user of a multi-user server: identity and port of their own camera-facing server. */
+    data class UserDef(val name: String, val udn: String, val friendlyName: String, val port: Int)
+
+    /**
+     * `users=alice,bob` plus `user.<name>.udn` / `.name` / `.port`. A missing UDN is generated and
+     * written to the file; a missing port counts up from http.port; the shown name defaults to
+     * `[PC]<Name>`. Names are letters, digits, `_` and `-` (they become folder names).
+     */
+    fun users(): List<UserDef> {
+        val names = (this["users"] ?: "").split(',').map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        val generated = LinkedHashMap<String, String>()
+        val defs = names.mapIndexedNotNull { i, raw ->
+            val name = userName(raw) ?: return@mapIndexedNotNull null
+            val udn = this["$USER_PREFIX$name.udn"]?.removePrefix("uuid:")?.lowercase()
+                ?: org.mundhenk.cambackup.core.ServerIdentity.generateUdn().also { generated["$USER_PREFIX$name.udn"] = it }
+            UserDef(name, udn, this["$USER_PREFIX$name.name"] ?: "[PC]${name.replaceFirstChar { c -> c.uppercase() }}", this["$USER_PREFIX$name.port"]?.toIntOrNull() ?: (httpPort + 1 + i))
+        }
+        if (generated.isNotEmpty()) save(generated)
+        return defs
+    }
+
+    /** The settings overrides the file holds for [user] (without udn/name/port): key -> value. */
+    fun userOverrides(user: String): Map<String, String> {
+        val prefix = "$USER_PREFIX$user."
+        return synchronized(props) {
+            props.stringPropertyNames().filter { it.startsWith(prefix) }.sorted()
+                .mapNotNull { k -> props.getProperty(k)?.trim()?.takeIf { it.isNotEmpty() }?.let { k.removePrefix(prefix) to it } }
+                .filter { (k, _) -> k !in setOf("udn", "name", "port") }.toMap()
+        }
+    }
 
     /** The overrides the file holds for [address]: key -> value, without the prefix. */
     fun cameraOverrides(address: String): Map<String, String> {
@@ -154,6 +199,9 @@ class Config(val dataDir: File, private val props: Properties, private val env: 
 
     companion object {
         const val CAMERA_PREFIX = "camera."
+        const val USER_PREFIX = "user."
+        /** A valid user name (letters, digits, `_`, `-`; up to 32), or null. */
+        fun userName(raw: String): String? = raw.trim().takeIf { Regex("[A-Za-z0-9_-]{1,32}").matches(it) }
         /** `192.168.1.23` -> `192_168_1_23` (dots would clash with the key separators). */
         fun cameraId(address: String): String = address.trim().replace('.', '_').replace(Regex("[^A-Za-z0-9_-]"), "_")
 
@@ -193,6 +241,13 @@ class Config(val dataDir: File, private val props: Properties, private val env: 
             |# day ({yyyy}-{MM}-{dd}), month ({yyyy}/{MM}), year ({yyyy}), or any pattern with {yyyy} {MM} {dd} and '/'.
             |# A second file with the same name gets a numbered suffix, nothing is overwritten.
             |storage.subfolder=flat
+            |
+            |# Several people on one server: users=alice,bob gives every user an identity of their own
+            |# (user.<name>.udn, user.<name>.name shown on the camera, user.<name>.port, counting up from
+            |# http.port), a folder <storage.dir>/<name>, exports under <export.dir>/<name> and their own
+            |# pairing file (http://<host>:52235/pairing.zip?user=<name>). user.<name>.<key> overrides any
+            |# pipeline setting for that user, camera.<ip>.<key> for one camera. Managed on the settings page.
+            |users=
             |
             |# Bearer token the Android app must send in backend mode (empty = no auth; LAN only!).
             |# Also protects the settings page (HTTP Basic auth, any user name, this token as password).

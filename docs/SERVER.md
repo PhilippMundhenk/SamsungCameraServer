@@ -96,6 +96,21 @@ RAW → JPEG when `raw.convert=true`) and LibRaw's `dcraw_emu` as the small fall
 `docker build --build-arg EXTRA_PACKAGES=darktable .` adds darktable, which `raw.converter=auto`
 prefers when present.
 
+## Several users on one server
+
+`users=alice,bob` (or **Add user** on the settings page) gives every user an identity of their
+own: a name shown on the camera (`user.alice.name`, default `[PC]Alice`), a UDN
+(`user.alice.udn`, generated if missing) and a port for their camera-facing server
+(`user.alice.port`, counting up from `http.port`). Each user has their own pairing file
+(`/pairing.zip?user=alice`), their files land under `<storage.dir>/alice/…` with their own
+ledger, exports go to `<export.dir>/alice/…`, and `user.alice.<key>` overrides any pipeline
+setting for that user (a camera's own `camera.<id>.<key>` wins over it). Cameras are told apart
+by the pairing file on their card, so a user with two cameras needs nothing else. The general
+identity keeps working next to the users. Users can be added and removed without a restart;
+removing one stops their server and keeps their files. The phone names its user with the
+`X-NX-User` header; `GET /api/v1/users` lists them and `GET /api/v1/identity?user=alice` hands
+out a user's identity for the app.
+
 ## Per-camera settings
 
 Every camera the server has seen gets its own block at the bottom of the settings page: the

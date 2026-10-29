@@ -21,12 +21,13 @@ class ProcessedFile(
     val size: Long,
     val camera: String,
     @Volatile var file: File,  // current location (changes with rename/export)
+    val user: String = "",     // multi-user server: the user whose identity the camera used ("" = the general one)
 ) {
     @Volatile var preview: File? = null   // JPEG rendered from a RAW, if any
     @Volatile var error: String? = null
 }
 
-class Session(val camera: String, val startedAt: Long = System.currentTimeMillis()) {
+class Session(val camera: String, val startedAt: Long = System.currentTimeMillis(), val user: String = "") {
     val files = ArrayList<ProcessedFile>()
     @Volatile var stored = 0
     @Volatile var skipped = 0
@@ -80,7 +81,7 @@ class Pipeline(
     // ------------------------------------------------------------------ per file
 
     private fun processFile(f: ProcessedFile) {
-        scoped.set(baseConfig.forCamera(f.camera))
+        scoped.set(baseConfig.forCameraAndUser(f.camera, f.user))
         try {
             timeShift(f)
             rawPreview(f)
@@ -198,7 +199,9 @@ class Pipeline(
     }
 
     private fun export(f: ProcessedFile, meta: Meta) {
-        val dir = config.exportDir ?: return
+        val base = config.exportDir ?: return
+        // a user's files go to <export.dir>/<user> unless the user has an export dir of their own
+        val dir = if (f.user.isNotEmpty() && !config.isSet("${Config.USER_PREFIX}${f.user}.export.dir")) File(base, f.user) else base
         val sub = meta.expand(config.exportSubfolder, f.file.nameWithoutExtension, f.file.extension, f.file.name)
             .split('/', '\\').filter { it.isNotBlank() }.joinToString(File.separator) { safeName(it) }
         val targetDir = if (sub.isEmpty()) dir else File(dir, sub)
@@ -254,7 +257,7 @@ class Pipeline(
     // ------------------------------------------------------------------ per session
 
     private fun finishSession(s: Session, sysOff: Boolean) {
-        scoped.set(baseConfig.forCamera(s.camera))
+        scoped.set(baseConfig.forCameraAndUser(s.camera, s.user))
         try { finishSessionScoped(s, sysOff) } finally { scoped.remove() }
     }
 
@@ -263,7 +266,7 @@ class Pipeline(
         val paths = files.flatMap { listOfNotNull(it.file, it.preview) }
         config.webhookUrl?.let { url ->
             val json = buildString {
-                append("{\"event\":\"done\",\"camera\":").append(Json.str(s.camera))
+                append("{\"event\":\"done\",\"camera\":").append(Json.str(s.camera)).append(",\"user\":").append(Json.str(s.user))
                 append(",\"sysOff\":").append(sysOff)
                 append(",\"stored\":").append(s.stored).append(",\"skipped\":").append(s.skipped)
                 append(",\"durationSec\":").append((System.currentTimeMillis() - s.startedAt) / 1000)
@@ -290,7 +293,7 @@ class Pipeline(
             } catch (e: IOException) { log("Webhook failed: $e") }
         }
         val env = mapOf(
-            "CAMBACKUP_EVENT" to "done", "CAMBACKUP_CAMERA" to s.camera, "CAMBACKUP_SYSOFF" to sysOff.toString(),
+            "CAMBACKUP_EVENT" to "done", "CAMBACKUP_CAMERA" to s.camera, "CAMBACKUP_USER" to s.user, "CAMBACKUP_SYSOFF" to sysOff.toString(),
             "CAMBACKUP_STORED" to s.stored.toString(), "CAMBACKUP_SKIPPED" to s.skipped.toString(),
             "CAMBACKUP_FILES" to paths.joinToString("\n") { it.path },
         )
