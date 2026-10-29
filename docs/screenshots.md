@@ -7,8 +7,9 @@ simulator; the file names are the simulator's.
 
 The status card shows whether the server runs, where photos go and the one action that
 matters; **Hotspot** next to it opens the phone's hotspot settings for use on the road. Below
-it every transferred file: ✓ on this phone, ✓✓ on the home server. Here the first file has
-already been uploaded, the rest are waiting for the home server.
+it every transferred file with a preview: ✓ on this phone, ✓✓ on the home server; a tap opens
+the file. Here the last session is still waiting for the home server, which the app keeps
+trying on its own ("automatic").
 
 ![Main screen](screenshots/app-main.png)
 
