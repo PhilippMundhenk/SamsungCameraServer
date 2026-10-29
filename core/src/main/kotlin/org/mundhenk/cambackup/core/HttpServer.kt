@@ -114,10 +114,21 @@ class HttpServer(
     }
 
     private fun parse(input: InputStream, socket: Socket): HttpRequest? {
-        val requestLine = readLine(input) ?: return null
+        val remote = socket.inetAddress.hostAddress ?: "?"
+        // A TLS ClientHello starts with 0x16 0x03: someone used https:// on this plain-HTTP port.
+        input.mark(2); val b0 = input.read(); val b1 = input.read(); input.reset()
+        if (b0 == 0x16 && b1 == 0x03) {
+            log("TLS handshake from $remote: this port speaks plain HTTP, use http:// instead of https://")
+            return null
+        }
+        val requestLine = readLine(input) ?: run { log("Connection from $remote closed without a request"); return null }
         val parts = requestLine.trim().split(' ')
         if (parts.size < 2) return null
         val method = parts[0].uppercase()
+        if (!method.all { it in 'A'..'Z' || it == '-' }) {
+            log("Not an HTTP request from $remote (${requestLine.length} bytes), ignored")
+            return null
+        }
         val target = parts[1]
         val headers = HashMap<String, String>()
         while (true) {

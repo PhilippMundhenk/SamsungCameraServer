@@ -89,12 +89,15 @@ class BackupServer(
             log("${if (req.header("user-agent")?.contains("DLNADOC", true) == true) "Camera" else "Client"} ${req.remoteAddress} fetched device description (${req.header("user-agent") ?: "no UA"})")
             HttpResponse.xml(UpnpXml.deviceDescription(identity))
         }
-        req.method == "GET" && req.path.endsWith("ContentDirectory1.xml", true) -> HttpResponse.xml(UpnpXml.contentDirectoryScpd)
-        req.method == "GET" && req.path.endsWith("ConnectionManager1.xml", true) -> HttpResponse.xml(UpnpXml.connectionManagerScpd)
+        req.method == "GET" && req.path.endsWith("ContentDirectory1.xml", true) -> { log("${req.remoteAddress} fetched the ContentDirectory service description"); HttpResponse.xml(UpnpXml.contentDirectoryScpd) }
+        req.method == "GET" && req.path.endsWith("ConnectionManager1.xml", true) -> { log("${req.remoteAddress} fetched the ConnectionManager service description"); HttpResponse.xml(UpnpXml.connectionManagerScpd) }
         req.method == "POST" && req.path == UpnpXml.CDS_CONTROL_PATH -> contentDirectory(req)
         req.method == "POST" && req.path == UpnpXml.CMS_CONTROL_PATH -> connectionManager(req)
         req.method == "POST" && req.path == UpnpXml.UPLOAD_PATH -> upload(req)
-        req.method == "SUBSCRIBE" || req.method == "UNSUBSCRIBE" -> HttpResponse(200, ByteArray(0), "text/plain", mapOf("SID" to "uuid:${identity.udn}-sub", "TIMEOUT" to "Second-1800"))
+        req.method == "SUBSCRIBE" || req.method == "UNSUBSCRIBE" -> {
+            log("${req.method} ${req.path} from ${req.remoteAddress}${req.header("callback")?.let { " (callback $it)" } ?: ""}")
+            HttpResponse(200, ByteArray(0), "text/plain", mapOf("SID" to "uuid:${identity.udn}-sub", "TIMEOUT" to "Second-1800"))
+        }
         fallback != null -> fallback.handle(req)
         else -> { log("Unhandled ${req.method} ${req.path} from ${req.remoteAddress}"); HttpResponse.notFound() }
     }
@@ -111,9 +114,9 @@ class BackupServer(
                 stats.sessions.incrementAndGet(); stats.lastCamera = req.remoteAddress
                 // FileCnt is what the camera intends to send: files not yet flagged as backed up on its
                 // card. 0 means the camera will sit on its transfer screen and send nothing.
-                val announced = Regex("<FileCnt>\\s*(\\d+)\\s*</FileCnt>").find(bodyText)?.groupValues?.get(1)?.toIntOrNull()
+                val announced = Regex("<(?:\\w+:)?FileCnt[^>]*>\\s*(\\d+)\\s*</(?:\\w+:)?FileCnt>").find(bodyText)?.groupValues?.get(1)?.toIntOrNull()
                 log("Backup session started by ${req.remoteAddress}" + when (announced) {
-                    null -> ""
+                    null -> " (arguments: ${soapArguments(bodyText).take(300)})"
                     0 -> ": 0 files announced, the camera has nothing new to send (every file on the card is already flagged as backed up; a file sent to any target with this UDN is not offered again)"
                     else -> ": $announced file(s) announced"
                 })
@@ -127,6 +130,21 @@ class BackupServer(
                 HttpResponse.xml(UpnpXml.soapResponse(action, cds, ""))
             }
             "CreateObject" -> createObject(req, bodyText)
+            else -> { log("CDS $action from ${req.remoteAddress}${browseTarget(action, bodyText)}"); genericContentDirectory(action, bodyText, req) }
+        }
+    }
+
+    /** The inside of the SOAP action element, for the log. */
+    private fun soapArguments(soap: String): String =
+        Regex("<(?:\\w+:)?X_BACKUP_START[^>]*>(.*?)</(?:\\w+:)?X_BACKUP_START>", RegexOption.DOT_MATCHES_ALL).find(soap)?.groupValues?.get(1)?.trim()
+            ?: soap.replace(Regex("\\s+"), " ").trim()
+
+    private fun browseTarget(action: String, soap: String): String =
+        if (action == "Browse") Regex("<(?:\\w+:)?ObjectID[^>]*>(.*?)</(?:\\w+:)?ObjectID>").find(soap)?.groupValues?.get(1)?.let { " (ObjectID $it)" } ?: "" else ""
+
+    private fun genericContentDirectory(action: String, bodyText: String, req: HttpRequest): HttpResponse {
+        val cds = UpnpXml.CDS_SERVICE_TYPE
+        return when (action) {
             "GetTransferProgress" -> HttpResponse.xml(UpnpXml.soapResponse(action, cds,
                 "<TransferStatus>COMPLETED</TransferStatus><TransferLength>0</TransferLength><TransferTotal>0</TransferTotal>"))
             "DestroyObject", "StopTransferResource" -> HttpResponse.xml(UpnpXml.soapResponse(action, cds, ""))
@@ -141,6 +159,7 @@ class BackupServer(
 
     private fun connectionManager(req: HttpRequest): HttpResponse {
         val action = soapAction(req); req.readBodyText()
+        log("CMS $action from ${req.remoteAddress}")
         val cms = UpnpXml.CMS_SERVICE_TYPE
         return when (action) {
             "GetProtocolInfo" -> HttpResponse.xml(UpnpXml.soapResponse(action, cms,
@@ -155,7 +174,11 @@ class BackupServer(
             log("CreateObject with unparsable DIDL from ${req.remoteAddress}: $e")
             return HttpResponse.xml(UpnpXml.soapFault(712, "Bad metadata"), 500)
         }
+        log("CreateObject for ${file.name} (${file.size} bytes, ${file.mimeType}) from ${req.remoteAddress}")
+        val started = System.nanoTime()
         val exists = sink.exists(file)
+        val lookupMs = (System.nanoTime() - started) / 1_000_000
+        if (lookupMs > 2000) log("Duplicate check for ${file.name} took ${lookupMs / 1000.0} s (slow storage?)")
         if (exists && fileExistsErrorCode != null) {
             stats.filesSkipped.incrementAndGet()
             log("Skip ${file.name} (already stored) -> UPnP error $fileExistsErrorCode")

@@ -26,6 +26,17 @@ class BackendSink(
 ) : BackupSink {
     private val baseUrl = baseUrl.trim().trimEnd('/')
 
+    /** Why the last identity/health call failed, for the UI; null after a success. */
+    @Volatile var lastError: String? = null
+        private set
+
+    private fun reason(e: IOException): String = when {
+        e is javax.net.ssl.SSLException && baseUrl.startsWith("https://", ignoreCase = true) ->
+            "the server does not speak TLS; the URL says https:// but the home server serves plain http://"
+        e.message?.contains("Cleartext", ignoreCase = true) == true -> "plain http:// is blocked on this device (${e.message})"
+        else -> e.message ?: e.javaClass.simpleName
+    }
+
     private fun HttpURLConnection.auth() {
         if (token.isNotBlank()) setRequestProperty("Authorization", "Bearer $token")
         if (deviceName.isNotBlank()) setRequestProperty("X-NX-Device", deviceName.replace(Regex("[\\r\\n]"), " ").take(80))
@@ -38,14 +49,14 @@ class BackendSink(
         val code = c.responseCode
         val body = (if (code < 400) c.inputStream else c.errorStream)?.use { it.readBytes().toString(Charsets.UTF_8) } ?: ""
         c.disconnect()
-        if (code != 200) { log("backend identity -> HTTP $code"); null }
+        if (code != 200) { lastError = "HTTP $code"; log("backend identity -> HTTP $code"); null }
         else {
             val udn = jsonField(body, "udn"); val name = jsonField(body, "name")
-            if (udn == null || name == null) { log("backend identity: unexpected answer $body"); null }
-            else ServerIdentity(udn.removePrefix("uuid:").lowercase(), name, jsonField(body, "mac") ?: ServerIdentity.DEFAULT_MAC)
+            if (udn == null || name == null) { lastError = "unexpected answer"; log("backend identity: unexpected answer $body"); null }
+            else { lastError = null; ServerIdentity(udn.removePrefix("uuid:").lowercase(), name, jsonField(body, "mac") ?: ServerIdentity.DEFAULT_MAC) }
         }
-    } catch (e: IOException) { log("backend identity failed: ${e.message}"); null }
-      catch (e: IllegalArgumentException) { log("backend identity invalid: ${e.message}"); null }
+    } catch (e: IOException) { lastError = reason(e); log("backend identity failed: $lastError"); null }
+      catch (e: IllegalArgumentException) { lastError = "invalid identity: ${e.message}"; log("backend identity invalid: ${e.message}"); null }
 
     /**
      * Asks the server to adopt [identity] (POST /api/v1/identity, needs the token). The server
@@ -62,7 +73,7 @@ class BackendSink(
         c.disconnect()
         if (code != 200) { log("backend identity push -> HTTP $code ${body.take(200)}"); null }
         else { val udn = jsonField(body, "udn"); val name = jsonField(body, "name"); if (udn != null && name != null) ServerIdentity(udn.removePrefix("uuid:").lowercase(), name, jsonField(body, "mac") ?: identity.macAddr) else null }
-    } catch (e: IOException) { log("backend identity push failed: ${e.message}"); null }
+    } catch (e: IOException) { lastError = reason(e); log("backend identity push failed: $lastError"); null }
 
     private fun jsonString(s: String): String = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
@@ -114,8 +125,9 @@ class BackendSink(
         val c = URL("$baseUrl/health").openConnection() as HttpURLConnection
         c.requestMethod = "GET"; c.connectTimeout = connectTimeoutMs; c.readTimeout = 5000
         val code = c.responseCode; c.disconnect()
+        lastError = if (code in 200..299) null else "HTTP $code"
         code in 200..299
-    } catch (e: IOException) { false }
+    } catch (e: IOException) { lastError = reason(e); false }
 
     private fun event(type: String, camera: String, sysOff: Boolean) {
         try {

@@ -47,6 +47,7 @@
     <string name="folder_reset">Use app storage</string>
     <string name="section_server">Home server</string>
     <string name="backend_url_hint">Server URL, e.g. http://nas.lan:52235</string>
+    <string name="backend_https_hint">The home server speaks plain http:// on port 52235; https:// only works through a TLS reverse proxy.</string>
     <string name="backend_token_hint">Token (api.token on the server, optional)</string>
     <string name="section_identity">Identity (must match the pairing file)</string>
     <string name="name_hint">Name shown on the camera</string>
@@ -70,7 +71,8 @@
     <string name="udn_source_server">from server %1$s (%2$s)</string>
     <string name="udn_shared_with_server">Shared with the server %1$s: one pairing file works for both.</string>
     <string name="udn_differs_from_server">The server %1$s uses a different UDN (%2$s). Cards paired with one of them do not reach the other.</string>
-    <string name="udn_server_unknown">Server %1$s not reachable; its identity could not be read.</string>
+    <string name="udn_server_unknown">Server %1$s not reachable: %2$s</string>
+    <string name="udn_server_no_answer">no answer</string>
     <string name="udn_server_checking">Asking the server for its identity…</string>
     <string name="use_server_identity">Use the server\'s identity</string>
     <string name="give_server_identity">Give the server this identity</string>

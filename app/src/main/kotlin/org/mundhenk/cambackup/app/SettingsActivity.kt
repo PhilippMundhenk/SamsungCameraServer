@@ -41,6 +41,7 @@ class SettingsActivity : AppCompatActivity() {
         b.chooseFolder.setOnClickListener { pickFolder.launch(prefs.folderUri) }
         b.resetFolder.setOnClickListener { prefs.folderUri = null; showFolder() }
         b.backendUrl.setText(prefs.backendUrl)
+        Ui.warnAboutHttps(b.backendUrl, b.backendUrlLayout)
         b.backendToken.setText(prefs.backendToken)
         b.serverName.setText(prefs.serverName)
         b.udn.setText(prefs.udn)

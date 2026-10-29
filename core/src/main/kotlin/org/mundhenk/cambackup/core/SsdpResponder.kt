@@ -94,7 +94,8 @@ class SsdpResponder(
         }
         for (nif in current) {
             if (joined.containsKey(nif.name)) continue
-            val label = "${nif.name} (${nif.inetAddresses.toList().filterIsInstance<Inet4Address>().joinToString(", ") { it.hostAddress }})"
+            val label = "${nif.name} (${nif.inetAddresses.toList().filterIsInstance<Inet4Address>().joinToString(", ") { it.hostAddress }})" +
+                (if (runCatching { nif.supportsMulticast() }.getOrDefault(true)) "" else " [interface reports no multicast flag, trying anyway]")
             try {
                 sock.joinGroup(InetSocketAddress(GROUP, ssdpPort), nif)
                 joined[nif.name] = nif; added += label
@@ -217,7 +218,7 @@ class SsdpResponder(
 
     private fun interfaces(): List<NetworkInterface> = try {
         interfaceSource().filter { nif ->
-            nif.isUp && !nif.isLoopback && nif.supportsMulticast() &&
+            nif.isUp && !nif.isLoopback &&
                 nif.inetAddresses.toList().any { it is Inet4Address } &&
                 (bindAddress == null || nif.inetAddresses.toList().contains(bindAddress))
         }

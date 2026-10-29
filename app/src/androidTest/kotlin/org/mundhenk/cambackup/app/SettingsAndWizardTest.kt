@@ -12,6 +12,7 @@ import androidx.test.espresso.Espresso.pressBack
 import androidx.test.espresso.action.ViewActions.closeSoftKeyboard
 import androidx.test.espresso.action.ViewActions.replaceText
 import androidx.test.espresso.action.ViewActions.scrollTo
+import androidx.test.espresso.assertion.ViewAssertions.doesNotExist
 import androidx.test.espresso.assertion.ViewAssertions.matches
 import androidx.test.espresso.intent.Intents
 import androidx.test.espresso.intent.Intents.intending
@@ -246,10 +247,15 @@ class SettingsAndWizardTest {
             // server URL is required for this mode
             onView(withId(R.id.next)).perform(tap())
             onView(withId(R.id.stepLabel)).check(matches(withText("Step 2 of 3")))
-            onView(withId(R.id.backendUrl)).perform(scrollTo(), replaceText("http://10.0.0.2:52235"), closeSoftKeyboard())
+            // https:// on the plain-HTTP server is a classic mistake: the field warns while typing
+            onView(withId(R.id.backendUrl)).perform(scrollTo(), replaceText("https://10.0.0.2:52235"), closeSoftKeyboard())
+            onView(withText(R.string.backend_https_hint)).check(matches(isDisplayed()))
+            onView(withId(R.id.backendUrl)).perform(scrollTo(), replaceText("10.0.0.2:52235"), closeSoftKeyboard())
+            onView(withText(R.string.backend_https_hint)).check(doesNotExist())
             onView(withId(R.id.backendToken)).perform(scrollTo(), replaceText("t"), closeSoftKeyboard())
             onView(withId(R.id.next)).perform(tap())
             onView(withId(R.id.stepLabel)).check(matches(withText("Step 3 of 3")))
+            assertEquals("http://10.0.0.2:52235", prefs.backendUrl)                       // scheme added
             onView(withId(R.id.next)).check(matches(withText(R.string.wizard_finish)))
             // back and forth keeps the state
             onView(withId(R.id.back)).perform(tap())

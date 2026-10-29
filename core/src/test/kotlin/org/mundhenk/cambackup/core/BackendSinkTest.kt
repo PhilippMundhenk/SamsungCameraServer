@@ -4,6 +4,7 @@ import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -104,6 +105,23 @@ class BackendSinkTest {
         assertEquals(null, sink("").pushIdentity(mine)); assertTrue(log.last().contains("identity push -> HTTP 401"))
         assertEquals(null, BackendSink("http://127.0.0.1:1", { log += it }, connectTimeoutMs = 300).pushIdentity(mine))
         assertTrue(log.last().startsWith("backend identity push failed"))
+    }
+
+    /** https:// typed for the plain-HTTP server: the failure says so instead of "handshake terminated". */
+    @Test
+    fun httpsAgainstThePlainServerIsExplained() {
+        val https = BackendSink("https://127.0.0.1:${backend.boundPort}", { log += it }, connectTimeoutMs = 3000)
+        assertNull(https.fetchIdentity())
+        assertTrue(https.lastError ?: "null", https.lastError!!.startsWith("the server does not speak TLS; the URL says https://"))
+        assertFalse(https.reachable())
+        assertTrue(https.lastError!!.startsWith("the server does not speak TLS"))
+        assertNull(https.pushIdentity(ServerIdentity.generate("[PC]X")))
+        assertTrue(log.any { it.startsWith("backend identity push failed: the server does not speak TLS") })
+        // a plain failure keeps the plain message; a success clears it
+        val dead = BackendSink("http://127.0.0.1:1", { log += it }, connectTimeoutMs = 1000)
+        assertFalse(dead.reachable()); assertTrue(dead.lastError!!, dead.lastError!!.isNotBlank())
+        val ok = BackendSink("http://127.0.0.1:${backend.boundPort}", { log += it })
+        assertTrue(ok.reachable()); assertNull(ok.lastError)
     }
 
     @Test

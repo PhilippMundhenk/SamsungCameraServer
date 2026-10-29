@@ -13,6 +13,19 @@ import java.util.Locale
 
 /** Small view helpers shared by the activities. */
 object Ui {
+    /** Live hint under a server-URL field: https:// does not work against the plain-HTTP home server. */
+    fun warnAboutHttps(field: android.widget.EditText, layout: com.google.android.material.textfield.TextInputLayout) {
+        fun update(text: CharSequence?) {
+            layout.helperText = if (text.toString().trim().startsWith("https://", ignoreCase = true)) field.context.getString(R.string.backend_https_hint) else null
+        }
+        field.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) = update(s)
+        })
+        update(field.text)
+    }
+
     /**
      * Android 15 draws every app edge to edge. The brand bar ([topBar]) grows under the status
      * bar (its top padding takes the inset), the rest of [root] is padded by the navigation bar

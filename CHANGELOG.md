@@ -18,6 +18,13 @@ All notable changes to this project are documented here. The format follows
 - Server: `tools.path` to find exiftool / RAW converters outside `PATH`.
 - Android: a **Hotspot** button next to *Start server* opens the phone's hotspot settings
   (Android lets no app switch the hotspot on directly).
+- Useful errors for the https:// mistake: the server logs a TLS handshake on its plain port
+  as such ("use http:// instead of https://"), the app warns under the URL field while typing,
+  adds `http://` when no scheme was typed and names the reason when the server's identity
+  cannot be read ("the server does not speak TLS ...", "HTTP 404").
+- Every protocol request is logged (service descriptions, SUBSCRIBE, Browse and the other
+  ContentDirectory/ConnectionManager actions, connections closed without a request), so a
+  camera that stops after the session start shows what it did next.
 - SSDP: networks that come up after the start (the phone's hotspot) are joined within a few
   seconds, NOTIFYs go out per interface with that interface's address, and a search from a
   network the OS has no route for is answered with the address on the same subnet. The session

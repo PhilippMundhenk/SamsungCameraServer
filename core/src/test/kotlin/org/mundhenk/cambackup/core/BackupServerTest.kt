@@ -92,12 +92,15 @@ class BackupServerTest {
         assertTrue(soap("GetSortCapabilities", "").second.contains("<SortCaps></SortCaps>"))
         assertTrue(soap("GetSystemUpdateID", "").second.contains("<Id>1</Id>"))
         assertTrue(soap("Browse", "<ObjectID>0</ObjectID>").second.contains("<TotalMatches>0</TotalMatches>"))
+        assertTrue(log.toString(), log.any { it == "CDS Browse from 127.0.0.1 (ObjectID 0)" } && log.any { it == "CDS GetSystemUpdateID from 127.0.0.1" })
+        assertTrue(log.none { it.startsWith("CreateObject for") })
         val (code, fault) = soap("NoSuchAction", "")
         assertEquals(500, code); assertTrue(fault.contains("<errorCode>401</errorCode>"))
         assertTrue(log.any { it.contains("Unknown CDS action 'NoSuchAction'") })
 
         val cms = UpnpXml.CMS_SERVICE_TYPE; val ctl = UpnpXml.CMS_CONTROL_PATH
         assertTrue(soap("GetProtocolInfo", "", cms, ctl).second.contains("http-get:*:image/jpeg:*"))
+        assertTrue(log.any { it == "CMS GetProtocolInfo from 127.0.0.1" })
         assertTrue(soap("GetCurrentConnectionIDs", "", cms, ctl).second.contains("<ConnectionIDs>0</ConnectionIDs>"))
         assertEquals(500, soap("GetCurrentConnectionInfo", "", cms, ctl).first)
     }
@@ -133,9 +136,12 @@ class BackupServerTest {
         soap("X_BACKUP_START", "<UDN>uuid:${identity.udn}</UDN><FileCnt> 0 </FileCnt><SysOff>0</SysOff>")
         assertTrue(log.toString(), log.any { it.startsWith("Backup session started by 127.0.0.1: 0 files announced, the camera has nothing new to send") })
         soap("X_BACKUP_START", "<UDN>uuid:${identity.udn}</UDN>")
-        assertTrue(log.toString(), log.any { it == "Backup session started by 127.0.0.1" })
-        assertEquals(3, server.stats.sessions.get())
-        assertEquals(listOf("start", "start", "start"), sink.events)
+        assertTrue(log.toString(), log.any { it == "Backup session started by 127.0.0.1 (arguments: <UDN>uuid:${identity.udn}</UDN>)" })
+        // namespaced arguments (some SOAP stacks prefix them) are understood too
+        soap("X_BACKUP_START", "<u:UDN>uuid:${identity.udn}</u:UDN><u:FileCnt>7</u:FileCnt>")
+        assertTrue(log.toString(), log.any { it == "Backup session started by 127.0.0.1: 7 file(s) announced" })
+        assertEquals(4, server.stats.sessions.get())
+        assertEquals(listOf("start", "start", "start", "start"), sink.events)
     }
 
     @Test

@@ -15,18 +15,24 @@ import org.mundhenk.cambackup.core.ServerIdentity
 object IdentityExchange {
     private fun backend(prefs: Prefs) = BackendSink(prefs.backendUrl, LogBus::log, prefs.backendToken, deviceName = prefs.deviceNickname)
 
+    /** Why the last [fetch] failed ("HTTP 404", "the server does not speak TLS ..."), for [describe]. */
+    @Volatile var lastError: String? = null
+        private set
+
     /** Reads the server's identity; null when there is no server URL or the server does not answer. */
     fun fetch(activity: Activity, prefs: Prefs, onResult: (ServerIdentity?) -> Unit) {
-        if (prefs.backendUrl.isBlank()) { onResult(null); return }
+        if (prefs.backendUrl.isBlank()) { lastError = null; onResult(null); return }
         Thread({
-            val id = backend(prefs).fetchIdentity()
+            val b = backend(prefs)
+            val id = b.fetchIdentity()
+            lastError = b.lastError
             activity.runOnUiThread { if (!activity.isFinishing) onResult(id) }
         }, "cambackup-identity").start()
     }
 
-    /** One-line verdict for the UI: shared, different, or unknown. */
+    /** One-line verdict for the UI: shared, different, or unknown (with the reason). */
     fun describe(activity: Activity, prefs: Prefs, server: ServerIdentity?): String = when {
-        server == null -> activity.getString(R.string.udn_server_unknown, prefs.backendUrl)
+        server == null -> activity.getString(R.string.udn_server_unknown, prefs.backendUrl, lastError ?: activity.getString(R.string.udn_server_no_answer))
         server.udn == prefs.udn -> activity.getString(R.string.udn_shared_with_server, server.friendlyName)
         else -> activity.getString(R.string.udn_differs_from_server, server.friendlyName, server.udn)
     }

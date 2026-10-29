@@ -83,7 +83,7 @@ class SsdpTest {
     @Test
     fun interfacesThatAppearLaterAreJoined() {
         val real = java.net.NetworkInterface.getNetworkInterfaces()?.toList().orEmpty()
-            .filter { it.isUp && !it.isLoopback && it.supportsMulticast() && it.inetAddresses.toList().any { a -> a is java.net.Inet4Address } }
+            .filter { it.isUp && !it.isLoopback && it.inetAddresses.toList().any { a -> a is java.net.Inet4Address } }
         org.junit.Assume.assumeTrue("needs a multicast-capable IPv4 interface", real.isNotEmpty())
         val port = freeUdpPort()
         val log = CopyOnWriteArrayList<String>()

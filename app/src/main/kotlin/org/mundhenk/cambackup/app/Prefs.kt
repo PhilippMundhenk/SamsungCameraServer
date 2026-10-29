@@ -36,9 +36,13 @@ class Prefs(context: Context) {
         get() = sp.getString("folder", null)?.let(Uri::parse)
         set(v) = sp.edit().putString("folder", v?.toString()).apply()
 
+    /** Normalised: trimmed, no trailing slash, "http://" added when no scheme was typed. */
     var backendUrl: String
         get() = sp.getString("backend", "") ?: ""
-        set(v) = sp.edit().putString("backend", v.trim().trimEnd('/')).apply()
+        set(v) {
+            val url = v.trim().trimEnd('/').let { if (it.isNotEmpty() && !it.contains("://")) "http://$it" else it }
+            sp.edit().putString("backend", url).apply()
+        }
 
     /** Optional bearer token for the backend API (server setting api.token). */
     var backendToken: String

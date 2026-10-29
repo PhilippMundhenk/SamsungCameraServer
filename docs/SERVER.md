@@ -105,6 +105,10 @@ for the phone API; the camera path must stay plain HTTP.
 
 ## When the camera does not connect
 
+`TLS handshake from <ip>: this port speaks plain HTTP` in the log means someone (the app's
+server URL, a browser) used `https://` on port 52235; the server itself only speaks plain
+`http://`. Put a TLS reverse proxy in front if you need https.
+
 The first thing to check is the `Backup session started by <ip>: N file(s) announced` line:
 the camera says how many files it will send. `0 files announced` means every file on its card
 is already flagged as backed up (the flag is per file, not per target: what the phone received

@@ -33,6 +33,7 @@ class WizardActivity : AppCompatActivity() {
         b.modeGroup.check(when (prefs.mode) { Mode.PHONE -> R.id.wizModePhone; Mode.PHONE_AND_SERVER -> R.id.wizModePhoneAndServer; Mode.SERVER -> R.id.wizModeServer })
         b.chooseFolder.setOnClickListener { pickFolder.launch(prefs.folderUri) }
         b.backendUrl.setText(prefs.backendUrl); b.backendToken.setText(prefs.backendToken)
+        Ui.warnAboutHttps(b.backendUrl, b.backendUrlLayout)
         b.serverName.setText(prefs.serverName); b.udn.text = prefs.udn
         b.regenerate.setOnClickListener {
             Ui.confirmNewUdn(this, prefs.udn) { b.udn.text = prefs.regenerateUdn(); LogBus.log("New UDN uuid:${prefs.udn} (previous one kept in the history)") }
@@ -60,6 +61,7 @@ class WizardActivity : AppCompatActivity() {
             1 -> {
                 prefs.backendUrl = b.backendUrl.text?.toString() ?: ""
                 prefs.backendToken = b.backendToken.text?.toString() ?: ""
+                b.backendUrl.setText(prefs.backendUrl)                    // shows the normalised form (http:// added)
                 if (prefs.mode.usesServer && prefs.backendUrl.isBlank()) { b.backendUrlLayout.error = getString(R.string.error_no_server_url); return }
                 b.backendUrlLayout.error = null
                 show(2)

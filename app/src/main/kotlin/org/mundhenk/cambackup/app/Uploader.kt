@@ -66,7 +66,7 @@ object Uploader {
             pending.isEmpty() -> "Sync: everything is on the server"
             else -> {
                 val backend = BackendSink(prefs.backendUrl, LogBus::log, prefs.backendToken, deviceName = prefs.deviceNickname)
-                if (!backend.reachable()) "Sync: server ${prefs.backendUrl} not reachable, ${pending.size} file(s) waiting"
+                if (!backend.reachable()) "Sync: server ${prefs.backendUrl} not reachable, ${pending.size} file(s) waiting" + (backend.lastError?.let { " ($it)" } ?: "")
                 else upload(context, prefs, backend, pending, mimeOf)
             }
         }

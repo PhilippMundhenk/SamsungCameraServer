@@ -102,6 +102,13 @@ class HttpServerTest {
     fun malformedOrEmptyRequestsCloseQuietly() {
         assertEquals("", raw(""))
         assertEquals("", raw("GARBAGE\r\n\r\n"))
+        assertTrue(logLines.toString(), logLines.any { it == "Connection from 127.0.0.1 closed without a request" })
+        // https:// used on the plain port: the TLS ClientHello is recognised and explained
+        assertEquals("", raw(byteArrayOf(0x16, 0x03, 0x01, 0x02, 0x00, 0x01, 0x00, 0x01, 0xfc.toByte(), 0x03, 0x03) + ByteArray(40) { 0x41 }))
+        assertTrue(logLines.toString(), logLines.any { it == "TLS handshake from 127.0.0.1: this port speaks plain HTTP, use http:// instead of https://" })
+        // binary noise that happens to contain a space is not reported as a method
+        assertEquals("", raw("\u00dcLUY;\u00c4 \u00a3\u00c8)\u00b66 HTTP/1.1\r\n\r\n"))
+        assertTrue(logLines.toString(), logLines.any { it.startsWith("Not an HTTP request from 127.0.0.1 (") })
         val tooLong = "GET / HTTP/1.1\r\nX: " + "a".repeat(20_000) + "\r\n\r\n"
         assertEquals("", raw(tooLong))
         assertTrue(logLines.any { it.contains("header line too long") })
