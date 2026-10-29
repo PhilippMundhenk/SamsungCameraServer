@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/logo.png" width="128" alt="Samsung Camera Backup"></p>
+
 # Samsung Camera Backup
 
 Get the photos and videos off your Samsung Wi-Fi camera again. The camera's built-in

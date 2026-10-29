@@ -71,9 +71,13 @@ Web CSS variables map 1:1: `--accent`=primary, `--bg`=surface, `--card`=surface_
 
 ## 5. Icon
 
-Launcher and notification icon: white camera body with a blue lens on a `primary` background,
-small upload arrow top right (`app/src/main/res/drawable/ic_launcher_foreground.xml`). The web
-page uses no logo, only the wordmark in the brand bar.
+Logo and launcher icon: a white camera glyph with a small upward arrow (the upload) on a
+`primary` background, generated with FLUX.1 (skill `image-gen`) and lifted onto a transparent
+layer. Files: `docs/logo.png` (512 px, rounded square, used centred at the top of the README),
+`app/src/main/res/mipmap-*/ic_launcher_foreground.png` (adaptive-icon foreground, glyph inside the
+66 dp safe zone, background `@color/ic_launcher_background`). The notification icon stays the
+monochrome vector `ic_notification.xml`. The web status page uses no logo, only the wordmark in the
+brand bar.
 
 ## 6. Tone
 
