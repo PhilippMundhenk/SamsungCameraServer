@@ -50,6 +50,11 @@
     <string name="section_folder">Folder on this phone</string>
     <string name="folder_default">App storage (Android/data/org.mundhenk.cambackup/files/CamBackup)</string>
     <string name="choose_folder">Choose folder…</string>
+    <string name="folder_layout_title">Folders inside</string>
+    <string name="layout_day">One folder per day (2026-10-29)</string>
+    <string name="layout_month">Year and month folders (2026/10)</string>
+    <string name="layout_year">One folder per year (2026)</string>
+    <string name="layout_flat">No folders</string>
     <string name="folder_reset">Use app storage</string>
     <string name="section_server">Home server</string>
     <string name="backend_url_hint">Server URL, e.g. http://nas.lan:52235</string>

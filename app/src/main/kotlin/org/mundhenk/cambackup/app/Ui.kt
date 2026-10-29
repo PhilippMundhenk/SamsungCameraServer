@@ -13,6 +13,13 @@ import java.util.Locale
 
 /** Small view helpers shared by the activities. */
 object Ui {
+    /** The folder-layout radio group (wizard and settings): shows the setting, saves every change. */
+    fun bindFolderLayout(group: android.widget.RadioGroup, prefs: Prefs) {
+        val ids = mapOf("day" to R.id.layoutDay, "month" to R.id.layoutMonth, "year" to R.id.layoutYear, "flat" to R.id.layoutFlat)
+        group.check(ids[prefs.folderLayout] ?: R.id.layoutDay)
+        group.setOnCheckedChangeListener { _, id -> prefs.folderLayout = ids.entries.firstOrNull { it.value == id }?.key ?: "day" }
+    }
+
     /** Tap on a transfer: hand the file to the phone's viewer (gallery, video player, ...). */
     fun openTransfer(activity: Activity, prefs: Prefs, t: Transfer) {
         val uri = runCatching { Sinks.direct(activity, prefs.folderUri).uriOf(t.date, t.name) }.getOrNull()

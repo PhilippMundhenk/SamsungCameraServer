@@ -35,6 +35,31 @@ class SafAndUnitsTest {
     @Before fun setUp() { TestSupport.reset(Mode.PHONE); TestSupport.safRoot().deleteRecursively(); TestSupport.safRoot().mkdirs() }
     @After fun tearDown() { TestSupport.reset(Mode.PHONE) }
 
+    /** Folder layout (#21): day (default), month, year or flat, for the app folder and for a SAF tree. */
+    @Test
+    fun folderLayouts() {
+        val file = org.mundhenk.cambackup.core.IncomingFile("L.JPG", "2026-10-29", 3, "image/jpeg", "object.item.imageItem", "cam")
+        val appRoot = Sinks.defaultFolder(context)
+        for ((layout, expected) in mapOf("day" to "2026-10-29/L.JPG", "month" to "2026/10/L.JPG", "year" to "2026/L.JPG", "flat" to "L.JPG")) {
+            val fs = FileSink(appRoot, context, layout)
+            fs.store(file, java.io.ByteArrayInputStream(ByteArray(3)))
+            assertTrue("$layout -> $expected", File(appRoot, expected).isFile)
+            assertEquals(File(appRoot, expected).path, fs.describe("2026-10-29", "L.JPG"))
+            assertEquals(3L, fs.sizeOf("2026-10-29", "L.JPG")); assertTrue(fs.delete("2026-10-29", "L.JPG"))
+            val saf = SafSink(context, TestDocumentsProvider.treeUri(), layout)
+            saf.store(file, java.io.ByteArrayInputStream(ByteArray(3)))
+            assertTrue("$layout (SAF) -> $expected", File(TestSupport.safRoot(), expected).isFile)
+            assertTrue(saf.describe("2026-10-29", "L.JPG").endsWith("/$expected"))
+            assertEquals(3L, saf.sizeOf("2026-10-29", "L.JPG")); assertTrue(saf.exists(file)); assertTrue(saf.delete("2026-10-29", "L.JPG"))
+            assertNull(saf.open("2026-10-29", "L.JPG"))
+        }
+        // the setting decides for the sinks the app builds
+        Prefs(context).folderLayout = "year"
+        assertTrue(Sinks.direct(context, null).describe("2026-10-29", "x").endsWith("/2026/x"))
+        Prefs(context).folderLayout = " "
+        assertEquals("day", Prefs(context).folderLayout)
+    }
+
     @Test
     fun safFolderReceivesFilesFromTheCamera() {
         Prefs(context).folderUri = TestDocumentsProvider.treeUri()

@@ -37,6 +37,11 @@ class Prefs(context: Context) {
         set(v) = sp.edit().putString("folder", v?.toString()).apply()
 
     /** Normalised: trimmed, no trailing slash, "http://" added when no scheme was typed. */
+    /** Folder layout under the phone folder: a [org.mundhenk.cambackup.core.Layout] preset ("day", "month", "year", "flat"). */
+    var folderLayout: String
+        get() = sp.getString("folderLayout", "day") ?: "day"
+        set(v) = sp.edit().putString("folderLayout", v.trim().ifBlank { "day" }).apply()
+
     var backendUrl: String
         get() = sp.getString("backend", "") ?: ""
         set(v) {

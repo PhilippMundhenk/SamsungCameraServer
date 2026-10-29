@@ -91,6 +91,11 @@ class SettingsAndWizardTest {
             onView(withId(R.id.folderLabel)).check(matches(withSubstring("root (org")))
             onView(withId(R.id.resetFolder)).perform(scrollTo(), tap())
             assertNull(prefs.folderUri)
+            // folder layout radios save at once
+            onView(withId(R.id.layoutMonth)).perform(scrollTo(), tap())
+            assertEquals("month", prefs.folderLayout)
+            onView(withId(R.id.layoutDay)).perform(scrollTo(), tap())
+            assertEquals("day", prefs.folderLayout)
             onView(withId(R.id.folderLabel)).check(matches(withText(R.string.folder_default)))
 
             // the footer names the installed build (version + git hash)
@@ -248,6 +253,8 @@ class SettingsAndWizardTest {
             answerPicker(Intent.ACTION_OPEN_DOCUMENT_TREE, TestDocumentsProvider.treeUri())
             onView(withId(R.id.chooseFolder)).perform(scrollTo(), tap())
             waitForUi { onView(withId(R.id.folderLabel)).check(matches(withSubstring("root ("))) }
+            onView(withId(R.id.layoutFlat)).perform(scrollTo(), tap())
+            assertEquals("flat", prefs.folderLayout)
             // server URL is required for this mode
             onView(withId(R.id.next)).perform(tap())
             onView(withId(R.id.stepLabel)).check(matches(withText("Step 2 of 3")))

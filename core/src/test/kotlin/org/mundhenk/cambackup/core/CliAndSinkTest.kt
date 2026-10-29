@@ -41,7 +41,7 @@ class CliAndSinkTest {
             val f = IncomingFile("../weird name?.JPG", "2026/10/27", 3, "image/jpeg", "object.item", "c")
             assertFalse(sink.exists(f))
             assertEquals(StoreResult.STORED, sink.store(f, ByteArrayInputStream("abc".toByteArray())))
-            val stored = File(File(root, "2026_10_27"), ".._weird_name_.JPG")
+            val stored = File(File(root, "2026-10-27"), ".._weird_name_.JPG")   // the date is parsed into the day layout, the name only sanitised
             assertEquals("abc", stored.readText())
             assertTrue(sink.exists(f))
             assertTrue(sink.exists(f.copy(size = -1)))

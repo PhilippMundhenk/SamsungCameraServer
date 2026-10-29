@@ -81,8 +81,10 @@ from before chasing a bug that is already fixed.
   offered to the phone again (and the other way round).
 * The app asks for the notification permission (Android 13+) to show the running notification;
   nothing else is requested.
-* Files are written as `<folder>/<camera date>/<original name>`, duplicates (same date, name
-  and size) are discarded, never overwritten.
+* Files are written as `<folder>/<camera date>/<original name>` by default; *Folders inside*
+  (wizard and Settings) switches to year/month folders, one folder per year, or no folders at
+  all. The choice applies to new files. Duplicates (same date, name and size) are discarded,
+  never overwritten.
 * The camera sends at most 1,000 files per run, newest first, and remembers what it sent.
   With more new files on the card, start Auto Backup again; the next run continues with the
   older ones.

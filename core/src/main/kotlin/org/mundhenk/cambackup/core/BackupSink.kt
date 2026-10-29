@@ -37,8 +37,8 @@ interface BackupSink {
     fun onBackupDone(cameraAddress: String, sysOff: Boolean) {}
 }
 
-/** Simple filesystem sink: <root>/<date>/<name>. Dedup by name + size. */
-class FileSystemSink(private val root: File) : BackupSink {
+/** Simple filesystem sink: <root>/<layout folder>/<name> ([Layout], one folder per day unless told otherwise). Dedup by name + size. */
+class FileSystemSink(private val root: File, private val layout: () -> String = { Layout.DAY }) : BackupSink {
     override fun exists(file: IncomingFile): Boolean {
         val f = target(file)
         return f.isFile && (file.size < 0 || f.length() == file.size)
@@ -64,8 +64,7 @@ class FileSystemSink(private val root: File) : BackupSink {
         return StoreResult.STORED
     }
 
-    private fun target(file: IncomingFile): File =
-        File(File(root, safeSegment(file.date)), safeSegment(file.name))
+    private fun target(file: IncomingFile): File = Layout.target(root, layout(), file.date, file.name)
 
     companion object {
         fun safeSegment(s: String): String =

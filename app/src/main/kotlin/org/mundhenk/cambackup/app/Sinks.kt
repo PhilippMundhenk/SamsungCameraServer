@@ -6,15 +6,16 @@ import androidx.documentfile.provider.DocumentFile
 import org.mundhenk.cambackup.core.BackupSink
 import org.mundhenk.cambackup.core.FileSystemSink
 import org.mundhenk.cambackup.core.IncomingFile
+import org.mundhenk.cambackup.core.Layout
 import org.mundhenk.cambackup.core.StoreResult
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
 
 object Sinks {
-    /** Direct mode: SAF folder if chosen, else the app's own external files dir. */
-    fun direct(context: Context, folder: Uri?): LocalSink =
-        if (folder != null) SafSink(context, folder) else FileSink(defaultFolder(context), context)
+    /** Direct mode: SAF folder if chosen, else the app's own external files dir; [layout] defaults to the setting. */
+    fun direct(context: Context, folder: Uri?, layout: String = Prefs(context).folderLayout): LocalSink =
+        if (folder != null) SafSink(context, folder, layout) else FileSink(defaultFolder(context), context, layout)
 
     fun defaultFolder(context: Context): File =
         (context.getExternalFilesDir("CamBackup") ?: File(context.filesDir, "CamBackup")).apply { mkdirs() }
@@ -34,12 +35,12 @@ interface LocalSink : BackupSink {
     fun delete(date: String, name: String): Boolean
 }
 
-/** App-private folder: <root>/<date>/<name>. */
-class FileSink(private val root: File, private val context: Context? = null) : LocalSink {
-    private val fs = FileSystemSink(root)
+/** App-private folder: <root>/<layout folder>/<name>. */
+class FileSink(private val root: File, private val context: Context? = null, private val layout: String = Layout.DAY) : LocalSink {
+    private val fs = FileSystemSink(root) { layout }
     override fun exists(file: IncomingFile) = fs.exists(file)
     override fun store(file: IncomingFile, input: InputStream) = fs.store(file, input)
-    private fun target(date: String, name: String) = File(File(root, FileSystemSink.safeSegment(date)), FileSystemSink.safeSegment(name))
+    private fun target(date: String, name: String) = Layout.target(root, layout, date, name)
     override fun open(date: String, name: String): InputStream? = target(date, name).takeIf { it.isFile }?.inputStream()
     override fun describe(date: String, name: String) = target(date, name).path
     override fun uriOf(date: String, name: String): Uri? {
@@ -51,14 +52,18 @@ class FileSink(private val root: File, private val context: Context? = null) : L
     override fun delete(date: String, name: String): Boolean = target(date, name).delete()
 }
 
-/** Writes into a Storage Access Framework tree: <tree>/<date>/<name>. */
-class SafSink(private val context: Context, private val treeUri: Uri) : LocalSink {
+/** Writes into a Storage Access Framework tree: <tree>/<layout folders>/<name>. */
+class SafSink(private val context: Context, private val treeUri: Uri, private val layout: String = Layout.DAY) : LocalSink {
     private val root: DocumentFile
         get() = DocumentFile.fromTreeUri(context, treeUri) ?: throw IOException("folder not accessible: $treeUri")
 
+    /** The folder for [date] according to the layout ("" = the tree itself), nested folders created on demand. */
     private fun dateDir(date: String, create: Boolean): DocumentFile? {
-        val name = FileSystemSink.safeSegment(date)
-        return root.findFile(name)?.takeIf { it.isDirectory } ?: if (create) root.createDirectory(name) else null
+        var dir: DocumentFile = root
+        for (segment in Layout.subfolder(layout, date).split(File.separatorChar).filter { it.isNotBlank() }) {
+            dir = dir.findFile(segment)?.takeIf { it.isDirectory } ?: (if (create) dir.createDirectory(segment) else null) ?: return null
+        }
+        return dir
     }
 
     override fun exists(file: IncomingFile): Boolean {
@@ -92,7 +97,8 @@ class SafSink(private val context: Context, private val treeUri: Uri) : LocalSin
         return context.contentResolver.openInputStream(doc.uri)
     }
 
-    override fun describe(date: String, name: String) = "$treeUri/${FileSystemSink.safeSegment(date)}/$name"
+    override fun describe(date: String, name: String) =
+        "$treeUri/" + Layout.subfolder(layout, date).replace(File.separatorChar, '/').let { if (it.isEmpty()) "" else "$it/" } + name
     override fun uriOf(date: String, name: String): Uri? = find(date, name)?.uri
     override fun sizeOf(date: String, name: String): Long = find(date, name)?.length() ?: -1L
     override fun delete(date: String, name: String): Boolean = find(date, name)?.delete() ?: false

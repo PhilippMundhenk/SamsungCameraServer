@@ -39,6 +39,7 @@ class SettingsActivity : AppCompatActivity() {
         }
         showMode(); showFolder()
         b.chooseFolder.setOnClickListener { pickFolder.launch(prefs.folderUri) }
+        Ui.bindFolderLayout(b.folderLayoutGroup, prefs)
         b.resetFolder.setOnClickListener { prefs.folderUri = null; showFolder() }
         b.backendUrl.setText(prefs.backendUrl)
         Ui.warnAboutHttps(b.backendUrl, b.backendUrlLayout)
@@ -115,7 +116,7 @@ class SettingsActivity : AppCompatActivity() {
         super.onResume()
         val locked = BackupService.running
         b.lockedNotice.visibility = if (locked) View.VISIBLE else View.GONE
-        for (v in listOf(b.modePhone, b.modePhoneAndServer, b.modeServer, b.chooseFolder, b.resetFolder, b.backendUrl, b.backendToken, b.autoSync, b.serverName, b.udn, b.regenerate, b.deviceNickname)) v.isEnabled = !locked
+        for (v in listOf(b.modePhone, b.modePhoneAndServer, b.modeServer, b.chooseFolder, b.resetFolder, b.layoutDay, b.layoutMonth, b.layoutYear, b.layoutFlat, b.backendUrl, b.backendToken, b.autoSync, b.serverName, b.udn, b.regenerate, b.deviceNickname)) v.isEnabled = !locked
         showUdnHistory()
         showServerIdentity()
     }

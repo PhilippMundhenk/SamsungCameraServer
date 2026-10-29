@@ -32,6 +32,7 @@ class WizardActivity : AppCompatActivity() {
 
         b.modeGroup.check(when (prefs.mode) { Mode.PHONE -> R.id.wizModePhone; Mode.PHONE_AND_SERVER -> R.id.wizModePhoneAndServer; Mode.SERVER -> R.id.wizModeServer })
         b.chooseFolder.setOnClickListener { pickFolder.launch(prefs.folderUri) }
+        Ui.bindFolderLayout(b.folderLayoutGroup, prefs)
         b.backendUrl.setText(prefs.backendUrl); b.backendToken.setText(prefs.backendToken)
         Ui.warnAboutHttps(b.backendUrl, b.backendUrlLayout)
         b.serverName.setText(prefs.serverName); b.udn.text = prefs.udn
