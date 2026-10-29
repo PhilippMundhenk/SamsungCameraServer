@@ -57,7 +57,7 @@ class Api(
             config.uiEnabled && path == "/" && req.method == "GET" -> html(StatusPage.render(this.statusModel(), req.query["scheme"]))
             config.uiEnabled && config.uiPreviews && req.method == "GET" && path.startsWith("/thumb/") -> thumb(path.removePrefix("/thumb/"))
             config.uiEnabled && config.uiPreviews && req.method == "GET" && path.startsWith("/file/") -> file(path.removePrefix("/file/"))
-            config.uiEnabled && config.uiSettings && path == "/settings" && req.method == "GET" -> settingsAuthed(req) { html(SettingsPage.render(config, notice = req.query["saved"]?.let { "Saved. Settings marked restart take effect after a restart, everything else from the next file on." }, scheme = req.query["scheme"])) }
+            config.uiEnabled && config.uiSettings && path == "/settings" && req.method == "GET" -> settingsAuthed(req) { html(SettingsPage.render(config, notice = req.query["saved"]?.let { "Saved. Settings marked restart take effect after a restart, everything else from the next file on." }, scheme = req.query["scheme"], cameras = cameras())) }
             config.uiEnabled && config.uiSettings && path == "/settings" && req.method == "POST" -> settingsAuthed(req) { saveSettings(req) }
             config.uiEnabled && config.uiSettings && path == "/settings/adopt-env" && req.method == "POST" -> settingsAuthed(req) { adoptEnvironment() }
             config.uiEnabled && path == "/devices/rename" && req.method == "POST" -> settingsAuthed(req) { renameDevice(req) }
@@ -103,13 +103,15 @@ class Api(
     private fun saveSettings(req: HttpRequest): HttpResponse {
         val form = SettingsCatalog.parseForm(req.readBodyText())
         val (updates, errors) = SettingsCatalog.updatesFrom(form)
-        if (errors.isNotEmpty()) return html(SettingsPage.render(config, errors = errors))
+        if (errors.isNotEmpty()) return html(SettingsPage.render(config, errors = errors, cameras = cameras()))
         // keys the environment overrides are not editable in the browser; keep the file's value for them
         val editable = updates.filterKeys { config.envValue(it) == null }
         config.save(editable)
         log("Settings saved from ${req.remoteAddress}: ${editable.keys.joinToString(", ")}")
         return HttpResponse(303, ByteArray(0), "text/plain", mapOf("Location" to "/settings?saved=1"))
     }
+
+    private fun cameras(): List<Devices.Device> = devices?.all()?.filter { it.kind == Devices.Kind.CAMERA } ?: emptyList()
 
     private fun adoptEnvironment(): HttpResponse {
         val fromEnv = SettingsCatalog.all.mapNotNull { def -> config.envValue(def.key)?.let { def.key to it } }.toMap()
@@ -216,6 +218,8 @@ class Api(
         val config: List<Pair<String, String>>, val tools: Map<String, Boolean>, val log: List<String>, val dataDir: String,
         val devices: List<Devices.Device> = emptyList(),
         val previews: Boolean = false,
+        /** camera address -> its own settings (key -> value), for cameras that have any */
+        val cameraOverrides: Map<String, Map<String, String>> = emptyMap(),
     ) {
         /** A camera's given name, or its address when it has none. */
         fun deviceName(address: String): String = devices.firstOrNull { it.kind == Devices.Kind.CAMERA && it.id.equals(address, true) }?.displayName ?: address
@@ -225,6 +229,7 @@ class Api(
         identity, config.httpPort, Duration.between(startedAt, Instant.now()), stats(),
         ledger.size(), ledger.recent(30), sink.activeSessions(), config.summary(), tools.status(), ServerLog.snapshot().takeLast(60), config.dataDir.absolutePath,
         devices?.all() ?: emptyList(), previews = config.uiPreviews && thumbnails != null,
+        cameraOverrides = cameras().associate { it.id to config.cameraOverrides(it.id) }.filterValues { it.isNotEmpty() },
     )
 
     private fun statusJson(): String {
@@ -312,6 +317,7 @@ object StatusPage {
                 sb.append("<tr><td class=\"check\" title=\"$kind\">${if (d.kind == Devices.Kind.CAMERA) "&#128247;" else "&#128241;"}</td><td><div class=\"name\">${esc(d.displayName)}${if (d.nickname.isNotEmpty()) " <span class=\"help\">${esc(d.id)}</span>" else ""}</div>")
                 sb.append("<div class=\"help\">$kind &middot; ${d.sessions} session${if (d.sessions == 1) "" else "s"} &middot; ${d.files} file${if (d.files == 1) "" else "s"} &middot; last seen ${esc(java.time.Instant.ofEpochMilli(d.lastSeen).atZone(java.time.ZoneId.systemDefault()).toLocalDateTime().withNano(0).toString().replace('T', ' '))}</div>")
                 sb.append("<div class=\"help\">${esc(d.address)}${if (d.detail.isNotEmpty()) " &middot; " + esc(d.detail) else ""}</div>")
+                m.cameraOverrides[d.id]?.let { own -> sb.append("<div class=\"help\">Own settings: ${own.entries.joinToString(" &middot; ") { (k, v) -> "<code>${esc(k)}=${esc(v)}</code>" }} <a href=\"/settings\">Change</a></div>") }
                 sb.append("<form method=\"post\" action=\"/devices/rename\" class=\"rename\"><input type=\"hidden\" name=\"kind\" value=\"${d.kind.name}\"><input type=\"hidden\" name=\"id\" value=\"${esc(d.id)}\">")
                 sb.append("<input type=\"text\" name=\"nickname\" maxlength=\"60\" value=\"${esc(d.nickname)}\" placeholder=\"${if (d.kind == Devices.Kind.CAMERA) "Name this camera, e.g. NX1000" else "Name this phone"}\" aria-label=\"Name for ${esc(d.id)}\"> <button class=\"btn secondary\" type=\"submit\">${if (d.nickname.isEmpty()) "Name" else "Rename"}</button></form></td></tr>")
             }

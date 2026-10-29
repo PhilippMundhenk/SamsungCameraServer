@@ -108,7 +108,7 @@ class CamBackupServer private constructor(
             tools.probeInBackground(listOf(config.exifTool, "darktable-cli", "rawtherapee-cli", "dcraw_emu"))
             val pipeline = Pipeline(config, ledger, tools, log)
             val devices = Devices(File(dataDir, "devices.tsv"))
-            val sink = ServerSink(config.storageDir.apply { mkdirs() }, ledger, pipeline, log, { config.storageSubfolder }, devices)
+            val sink = ServerSink(config.storageDir.apply { mkdirs() }, ledger, pipeline, log, { camera -> config.forCamera(camera).storageSubfolder }, devices)
             val backupRef = java.util.concurrent.atomic.AtomicReference<BackupServer>()
             val api = Api(config, identity, sink, ledger, tools, { backupRef.get()?.stats }, log, devices, Thumbnails(File(dataDir, "thumbs"), log))
             val backup = BackupServer(

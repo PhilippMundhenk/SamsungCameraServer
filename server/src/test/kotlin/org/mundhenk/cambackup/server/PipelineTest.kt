@@ -68,6 +68,37 @@ class PipelineTest {
         assertNull(txt.error)
     }
 
+    /** #19: a camera's own rename pattern / export folder / time shift win over the general ones; blank inherits. */
+    @Test
+    fun perCameraSettingsOverrideTheGeneralOnes() {
+        fakeExiftool(bin)
+        val export = File(dir, "export")
+        val (p, ledger, cfg) = pipeline(
+            "rename.pattern" to "{base}_general.{ext}", "exif.timeshift" to "",
+            "camera.10_0_0_7.rename.pattern" to "{base}_seven.{ext}", "camera.10_0_0_7.exif.timeshift" to "+1:00", "camera.10_0_0_7.export.dir" to export.path,
+            "camera.10_0_0_8.rename.pattern" to "   ")
+        fun file(name: String, camera: String): ProcessedFile {
+            val f = File(storage, "2026-10-27/$name").apply { parentFile.mkdirs(); writeBytes(ByteArray(10)) }
+            ledger.record("2026-10-27", name, 10, f)
+            return ProcessedFile("2026-10-27", name, 10, camera, f)
+        }
+        val seven = file("A.JPG", "10.0.0.7"); val nine = file("B.JPG", "10.0.0.9"); val eight = file("C.JPG", "10.0.0.8")
+        p.submitFile(seven); p.submitFile(nine); p.submitFile(eight); p.awaitIdle()
+        assertEquals("A_seven.JPG", seven.file.name); assertTrue(seven.file.path.startsWith(export.path))   // own pattern, own export dir
+        assertEquals("B_general.JPG", nine.file.name); assertTrue(nine.file.path.startsWith(storage.path))  // general ones
+        assertEquals("C_general.JPG", eight.file.name)                                                    // blank override inherits
+        assertTrue(log.any { it == "Shifted EXIF dates of A.JPG by +1:00" }); assertTrue(log.none { it.contains("Shifted EXIF dates of B.JPG") })
+        // the view itself
+        assertEquals("{base}_seven.{ext}", cfg.forCamera("10.0.0.7").renamePattern); assertEquals("{base}_general.{ext}", cfg.forCamera("10.0.0.9").renamePattern)
+        assertTrue(cfg.forCamera(null) === cfg); assertTrue(cfg.forCamera(" ") === cfg)
+        assertEquals(mapOf("exif.timeshift" to "+1:00", "export.dir" to export.path, "rename.pattern" to "{base}_seven.{ext}"), cfg.cameraOverrides("10.0.0.7"))
+        assertEquals(emptyMap<String, String>(), cfg.cameraOverrides("10.0.0.8"))
+        assertEquals("192_168_1_23", Config.cameraId("192.168.1.23")); assertEquals("fe80__1", Config.cameraId("fe80::1"))
+        // the environment can carry an override too
+        val env = config(dir, "tools.path" to bin.path, env = mapOf("CAMBACKUP_CAMERA_10_0_0_7_EXIF_TIMESHIFT" to "-2:00"))
+        assertEquals("-2:00", env.forCamera("10.0.0.7").exifTimeShift); assertNull(env.exifTimeShift)
+    }
+
     @Test
     fun missingOrFailingExiftoolDegradesGracefully() {
         val (p1, l1, _) = pipeline("exif.timeshift" to "+1:00", "rename.pattern" to "{yyyy}-{name}", "exif.tool" to "no-such-exiftool")

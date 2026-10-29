@@ -87,6 +87,50 @@ class SettingsTest {
         assertTrue(log.any { it.startsWith("Settings: copied 3 environment value(s)") })
     }
 
+    /** #19: the settings page has a section per known camera; saved values land as camera.<id>.<key> and steer the sink and pipeline. */
+    @Test
+    fun perCameraSectionOnTheSettingsPage() {
+        val s = start(mapOf("CAMBACKUP_API_TOKEN" to "tok", "CAMBACKUP_EXIF_TOOL" to "no-exiftool-here"))
+        val base = "http://127.0.0.1:${s.port}"
+        val basic = mapOf("Authorization" to "Basic " + java.util.Base64.getEncoder().encodeToString("x:tok".toByteArray()), "Content-Type" to "application/x-www-form-urlencoded")
+        var page = http("GET", "$base/settings", headers = basic).second
+        assertTrue(page, page.contains("<h2>Per camera</h2>") && page.contains("No camera has talked to this server yet"))
+        s.devices.seen(Devices.Kind.CAMERA, "127.0.0.1", "127.0.0.1", session = true)
+        s.devices.rename(Devices.Kind.CAMERA, "127.0.0.1", "NX1000")
+        page = http("GET", "$base/settings", headers = basic).second
+        assertTrue(page, page.contains("<h3>NX1000 <code>127.0.0.1</code></h3>") && page.contains("name=\"camera.127_0_0_1.exif.timeshift\""))
+        assertTrue(page.contains("name=\"camera.127_0_0_1.raw.convert\"><option value=\"\" selected>inherit (off)</option>"))
+        assertTrue(page.contains("name=\"camera.127_0_0_1.storage.subfolder\"><option value=\"\" selected>inherit ("))
+        assertFalse(page.contains("camera.127_0_0_1.exif.tool"))                  // tool locations are not per camera
+        // a bad number is reported, nothing saved
+        val (badCode, badPage) = http("POST", "$base/settings", form("camera.127_0_0_1.raw.quality" to "abc"), basic, followRedirects = false)
+        assertEquals(200, badCode); assertTrue(badPage, badPage.contains("JPEG quality (camera 127.0.0.1): &apos;abc&apos; is not a number"))
+        // the real thing: layout, time shift, a boolean, a number; blank entries are ignored
+        val (code, _) = http("POST", "$base/settings", form(
+            "camera.127_0_0_1.storage.subfolder" to "year", "camera.127_0_0_1.exif.timeshift" to "+1:00", "camera.127_0_0_1.raw.convert" to "true",
+            "camera.127_0_0_1.raw.quality" to "70", "camera.127_0_0_1.rename.pattern" to "", "camera.127_0_0_1.raw.onlyifnojpeg" to "maybe", "camera.10_0_0_9.nonsense" to "x"),
+            basic, followRedirects = false)
+        assertEquals(303, code)
+        val text = s.config.file.readText()
+        assertTrue(text, text.contains("camera.127_0_0_1.storage.subfolder=year") && text.contains("camera.127_0_0_1.exif.timeshift=+1:00") && text.contains("camera.127_0_0_1.raw.convert=true") && text.contains("camera.127_0_0_1.raw.quality=70"))
+        assertFalse(text.contains("onlyifnojpeg=maybe") || text.contains("nonsense"))
+        assertEquals("+1:00", s.config.forCamera("127.0.0.1").exifTimeShift); assertNull(s.config.exifTimeShift)
+        assertTrue(s.config.forCamera("127.0.0.1").rawConvert); assertFalse(s.config.rawConvert)
+        // the page shows the saved values, the status page lists them
+        page = http("GET", "$base/settings", headers = basic).second
+        assertTrue(page, page.contains("name=\"camera.127_0_0_1.exif.timeshift\" value=\"+1:00\"") && page.contains("<option value=\"true\" selected>on</option>") && page.contains("<option value=\"year\" selected>"))
+        val status = http("GET", "$base/").second
+        assertTrue(status, status.contains("Own settings: <code>exif.timeshift=+1:00</code>"))
+        // the camera's files land in its own layout (year folders), the general layout stays flat
+        CameraSimulator("127.0.0.1", s.port) { log += it }.runBackup(listOf(CameraSimulator.SimFile("Y.JPG", "2026-10-28", "image/jpeg", ByteArray(5))))
+        s.pipeline.awaitIdle()
+        assertTrue(File(s.config.storageDir, "2026/Y.JPG").isFile)
+        // back to inherit: blank removes the override
+        http("POST", "$base/settings", form("camera.127_0_0_1.exif.timeshift" to "", "camera.127_0_0_1.raw.convert" to ""), basic, followRedirects = false)
+        assertNull(s.config.forCamera("127.0.0.1").exifTimeShift); assertFalse(s.config.forCamera("127.0.0.1").rawConvert)
+        assertEquals(setOf("storage.subfolder", "raw.quality"), s.config.cameraOverrides("127.0.0.1").keys)
+    }
+
     @Test
     fun configSaveHandlesMissingFileUnknownKeysAndEscaping() {
         val cfg = TestSupport.config(dataDir, "hook.command" to "echo hi")

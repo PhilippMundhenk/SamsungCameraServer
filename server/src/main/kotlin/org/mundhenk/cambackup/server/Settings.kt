@@ -55,6 +55,9 @@ object SettingsCatalog {
     )
 
     val sections: List<String> = all.map { it.section }.distinct()
+    /** What a camera may have its own value for: the folder layout, every pipeline stage and the hooks (not tool locations). */
+    val perCamera: List<SettingDef> = all.filter { (it.key == "storage.subfolder" || it.section == "Pipeline" || it.section == "Hooks") && it.key !in setOf("exif.tool", "tools.path") }
+    private val cameraKey = Regex("^camera\\.([A-Za-z0-9_-]+)\\.(.+)$")
     fun byKey(key: String): SettingDef? = all.firstOrNull { it.key == key }
 
     /** application/x-www-form-urlencoded body -> key/value pairs (last wins). */
@@ -91,6 +94,17 @@ object SettingsCatalog {
                 else -> updates[def.key] = raw.trim()
             }
         }
+        // per-camera overrides: camera.<id>.<key>; blank = inherit the general value
+        for ((k, raw) in form) {
+            val m = cameraKey.find(k) ?: continue
+            val def = perCamera.firstOrNull { it.key == m.groupValues[2] } ?: continue
+            val v = raw.trim()
+            when (def.type) {
+                SettingDef.Type.BOOL -> if (v == "" || v == "true" || v == "false") updates[k] = v
+                SettingDef.Type.NUMBER -> if (v.isEmpty() || v.toIntOrNull() != null) updates[k] = v else errors += "${def.label} (camera ${m.groupValues[1].replace('_', '.')}): '$v' is not a number"
+                else -> updates[k] = v
+            }
+        }
         return updates to errors
     }
 }
@@ -99,7 +113,7 @@ object SettingsCatalog {
 object SettingsPage {
     private fun esc(s: String) = UpnpXml.escape(s)
 
-    fun render(config: Config, notice: String? = null, errors: List<String> = emptyList(), scheme: String? = null): String {
+    fun render(config: Config, notice: String? = null, errors: List<String> = emptyList(), scheme: String? = null, cameras: List<Devices.Device> = emptyList()): String {
         val sb = StringBuilder()
         sb.append(Html.head("Settings", scheme = scheme))
         sb.append(Html.header("settings"))
@@ -120,8 +134,41 @@ object SettingsPage {
             for (def in SettingsCatalog.all.filter { it.section == section }) sb.append(row(config, def))
             sb.append("</table>")
         }
+        sb.append("<h2>Per camera</h2>")
+        sb.append("<div class=\"help\">Each camera the server has seen can have its own folder layout, pipeline settings and hooks; empty fields inherit the general value above. Cameras are told apart by their address, so give them a fixed address in your router. Names are given on the status page.</div>")
+        if (cameras.isEmpty()) sb.append("<p class=\"help\">No camera has talked to this server yet.</p>")
+        for (cam in cameras) {
+            val id = Config.cameraId(cam.id)
+            sb.append("<h3>${esc(cam.displayName)}${if (cam.nickname.isNotEmpty()) " <code>${esc(cam.id)}</code>" else ""}</h3><table class=\"settings\">")
+            for (def in SettingsCatalog.perCamera) sb.append(cameraRow(config, def, id))
+            sb.append("</table>")
+        }
         sb.append("<p><button class=\"btn\" type=\"submit\">Save</button> <a class=\"btn secondary\" href=\"/\">Back to status</a></p></form>")
         sb.append(Html.footer())
+        return sb.toString()
+    }
+
+    /** One per-camera field: the file's override or empty (inherit), with the general value as a hint. */
+    private fun cameraRow(config: Config, def: SettingDef, cameraId: String): String {
+        val key = "${Config.CAMERA_PREFIX}$cameraId.${def.key}"
+        val value = config.fileValue(key) ?: ""
+        val general = config[def.key] ?: ""
+        val sb = StringBuilder("<tr><td class=\"k\"><label for=\"${esc(key)}\">${esc(def.label)}</label><br><code>${esc(def.key)}</code></td><td>")
+        when (def.type) {
+            SettingDef.Type.BOOL -> {
+                sb.append("<select id=\"${esc(key)}\" name=\"${esc(key)}\"><option value=\"\"${if (value.isEmpty()) " selected" else ""}>inherit (${if (general.equals("true", true)) "on" else "off"})</option>")
+                sb.append("<option value=\"true\"${if (value.equals("true", true)) " selected" else ""}>on</option><option value=\"false\"${if (value.equals("false", true)) " selected" else ""}>off</option></select>")
+            }
+            SettingDef.Type.SELECT -> {
+                sb.append("<select id=\"${esc(key)}\" name=\"${esc(key)}\"><option value=\"\"${if (value.isEmpty()) " selected" else ""}>inherit (${esc(general.ifEmpty { def.options.first().second })})</option>")
+                for ((v, label) in def.options) sb.append("<option value=\"${esc(v)}\"${if (v.equals(value, true)) " selected" else ""}>${esc(label)}</option>")
+                if (value.isNotEmpty() && def.options.none { it.first.equals(value, true) }) sb.append("<option value=\"${esc(value)}\" selected>${esc(value)} (custom)</option>")
+                sb.append("</select>")
+            }
+            SettingDef.Type.NUMBER -> sb.append("<input type=\"number\" id=\"${esc(key)}\" name=\"${esc(key)}\" value=\"${esc(value)}\" placeholder=\"inherits ${esc(general.ifEmpty { def.placeholder.ifEmpty { "(off)" } })}\">")
+            SettingDef.Type.TEXT -> sb.append("<input type=\"${if (def.secret) "password" else "text"}\" id=\"${esc(key)}\" name=\"${esc(key)}\" value=\"${esc(value)}\" placeholder=\"inherits ${esc(if (def.secret && general.isNotEmpty()) "••••••" else general.ifEmpty { "(off)" })}\" spellcheck=\"false\">")
+        }
+        sb.append("</td></tr>")
         return sb.toString()
     }
 
@@ -169,7 +216,7 @@ body{font:15px/1.5 system-ui,sans-serif;margin:0;background:var(--bg);color:var(
 header{background:var(--accent);color:var(--on-accent);padding:14px 16px;font-size:1.25em;font-weight:500;display:flex;align-items:center;gap:12px}
 header span{opacity:.8;font-weight:400;font-size:.8em}header nav{margin-left:auto;font-size:.75em;font-weight:400}header nav a{color:var(--on-accent);text-decoration:none;margin-left:14px;opacity:.85}header nav a.current{opacity:1;text-decoration:underline}
 main{max-width:1000px;margin:auto;padding:16px}
-h1{font-size:1.4em;margin:.2em 0}h2{font-size:1.05em;margin:1.4em 0 .4em;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+h1{font-size:1.4em;margin:.2em 0}h3{font-size:1em;margin:1.2em 0 .3em}h2{font-size:1.05em;margin:1.4em 0 .4em;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
 .tile{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
 .tile b{display:block;font-size:1.4em}.tile span{color:var(--muted);font-size:.85em}

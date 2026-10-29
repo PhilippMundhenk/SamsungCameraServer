@@ -41,12 +41,16 @@ class Session(val camera: String, val startedAt: Long = System.currentTimeMillis
  * Every stage is optional and skipped (with a log line) when its tool is missing.
  */
 class Pipeline(
-    private val config: Config,
+    private val baseConfig: Config,
     private val ledger: Ledger,
     private val tools: Tools,
     private val log: (String) -> Unit,
 ) {
     private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "cambackup-pipeline").apply { isDaemon = true } }
+
+    private val scoped = ThreadLocal<Config>()
+    /** The settings as the camera of the file (or session) being processed sees them; the general ones otherwise. */
+    private val config: Config get() = scoped.get() ?: baseConfig
 
     fun submitFile(f: ProcessedFile) {
         worker.execute {
@@ -76,6 +80,7 @@ class Pipeline(
     // ------------------------------------------------------------------ per file
 
     private fun processFile(f: ProcessedFile) {
+        scoped.set(baseConfig.forCamera(f.camera))
         try {
             timeShift(f)
             rawPreview(f)
@@ -85,6 +90,7 @@ class Pipeline(
         } finally {
             // whatever happened, the ledger must point at where the file is now
             if (f.file.path != ledger.find(f.date, f.originalName)?.path) ledger.updatePath(f.date, f.originalName, f.file)
+            scoped.remove()
         }
     }
 
@@ -248,6 +254,11 @@ class Pipeline(
     // ------------------------------------------------------------------ per session
 
     private fun finishSession(s: Session, sysOff: Boolean) {
+        scoped.set(baseConfig.forCamera(s.camera))
+        try { finishSessionScoped(s, sysOff) } finally { scoped.remove() }
+    }
+
+    private fun finishSessionScoped(s: Session, sysOff: Boolean) {
         val files = synchronized(s.files) { s.files.toList() }
         val paths = files.flatMap { listOfNotNull(it.file, it.preview) }
         config.webhookUrl?.let { url ->

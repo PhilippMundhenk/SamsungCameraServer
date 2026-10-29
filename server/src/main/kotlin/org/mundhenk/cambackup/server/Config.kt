@@ -10,7 +10,7 @@ import java.util.Properties
  * first start so the data volume documents itself. The web UI's settings page edits the file
  * through [save]; the environment always wins over the file.
  */
-class Config(val dataDir: File, private val props: Properties, private val env: Map<String, String> = System.getenv()) {
+class Config(val dataDir: File, private val props: Properties, private val env: Map<String, String> = System.getenv(), private val scope: String? = null) {
 
     enum class Source { ENVIRONMENT, FILE, DEFAULT }
 
@@ -18,10 +18,33 @@ class Config(val dataDir: File, private val props: Properties, private val env: 
 
     private fun envKey(key: String) = "CAMBACKUP_" + key.uppercase().replace('.', '_')
 
+    /** The effective value: a per-camera override first (when this is a [forCamera] view), then environment, then file. */
     operator fun get(key: String): String? {
+        if (scope != null) lookup("$CAMERA_PREFIX$scope.$key")?.let { return it }
+        return lookup(key)
+    }
+
+    private fun lookup(key: String): String? {
         val fromEnv = env[envKey(key)]?.trim()
         if (!fromEnv.isNullOrEmpty()) return fromEnv
         return synchronized(props) { props.getProperty(key)?.trim()?.takeIf { it.isNotEmpty() } }
+    }
+
+    /**
+     * The settings as one camera sees them: `camera.<id>.<key>` (id = the camera's address with
+     * dots as underscores, e.g. `camera.192_168_1_23.exif.timeshift`) overrides the general key,
+     * in the file or as `CAMBACKUP_CAMERA_192_168_1_23_EXIF_TIMESHIFT`. Blank = inherit.
+     */
+    fun forCamera(address: String?): Config =
+        if (address.isNullOrBlank()) this else Config(dataDir, props, env, cameraId(address))
+
+    /** The overrides the file holds for [address]: key -> value, without the prefix. */
+    fun cameraOverrides(address: String): Map<String, String> {
+        val prefix = "$CAMERA_PREFIX${cameraId(address)}."
+        return synchronized(props) {
+            props.stringPropertyNames().filter { it.startsWith(prefix) }.sorted()
+                .mapNotNull { k -> props.getProperty(k)?.trim()?.takeIf { it.isNotEmpty() }?.let { k.removePrefix(prefix) to it } }.toMap()
+        }
     }
 
     /** Where the effective value of [key] comes from. */
@@ -130,6 +153,10 @@ class Config(val dataDir: File, private val props: Properties, private val env: 
     private fun escape(v: String): String = v.trim().replace("\\", "\\\\")
 
     companion object {
+        const val CAMERA_PREFIX = "camera."
+        /** `192.168.1.23` -> `192_168_1_23` (dots would clash with the key separators). */
+        fun cameraId(address: String): String = address.trim().replace('.', '_').replace(Regex("[^A-Za-z0-9_-]"), "_")
+
         const val FILE_NAME = "cambackup.conf"
 
         fun load(dataDir: File, env: Map<String, String> = System.getenv()): Config {

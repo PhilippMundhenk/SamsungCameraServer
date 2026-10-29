@@ -96,6 +96,25 @@ RAW → JPEG when `raw.convert=true`) and LibRaw's `dcraw_emu` as the small fall
 `docker build --build-arg EXTRA_PACKAGES=darktable .` adds darktable, which `raw.converter=auto`
 prefers when present.
 
+## Per-camera settings
+
+Every camera the server has seen gets its own block at the bottom of the settings page: the
+folder layout, every pipeline stage (time shift, RAW rendering, renaming, export) and the hooks
+can be set per camera; empty fields inherit the general value. In the file the keys are
+`camera.<id>.<key>` with the camera's address, dots as underscores:
+
+```
+exif.timeshift=
+camera.192_168_1_23.exif.timeshift=+1:00
+camera.192_168_1_23.rename.pattern={yyyy}{MM}{dd}_{HH}{mm}{ss}_kitchen_{base}.{ext}
+camera.192_168_1_24.storage.subfolder=year
+```
+
+The same works from the environment (`CAMBACKUP_CAMERA_192_168_1_23_EXIF_TIMESHIFT=+1:00`).
+Cameras are told apart by their IP address, so give each one a fixed address in your router;
+the name given on the status page is only a label. Files that arrived through the phone carry
+the camera's address too (`X-NX-Camera`), so the overrides apply to them as well.
+
 ## Networking
 
 The camera finds the server via SSDP multicast (TTL 2), so the container must be on the

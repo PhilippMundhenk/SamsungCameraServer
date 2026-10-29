@@ -24,6 +24,11 @@ All notable changes to this project are documented here. The format follows
   as such ("use http:// instead of https://"), the app warns under the URL field while typing,
   adds `http://` when no scheme was typed and names the reason when the server's identity
   cannot be read ("the server does not speak TLS ...", "HTTP 404").
+- Server: per-camera settings (#19): folder layout, every pipeline stage and the hooks can be
+  set per camera on the settings page (`camera.<id>.<key>`, blank = inherit); the status page
+  lists a camera's own settings.
+- Android: folder layout for the phone folder (#21): one folder per day (as before), year
+  and month, one per year, or flat; in the wizard and in Settings.
 - Server: thumbnails on the status page (JPEGs directly, RAW through the rendered JPEG next
   to it), each file name opens the file; cached under `<data>/thumbs`; `ui.previews=false`
   turns both off.
