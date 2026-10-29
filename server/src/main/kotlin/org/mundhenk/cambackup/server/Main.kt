@@ -113,7 +113,7 @@ class CamBackupServer private constructor(
             val api = Api(config, identity, sink, ledger, tools, { backupRef.get()?.stats }, log, devices, Thumbnails(File(dataDir, "thumbs"), log))
             val backup = BackupServer(
                 identity, sink, httpPort = httpPortOverride ?: config.httpPort, log = log,
-                enableSsdp = config.ssdpEnabled, fallback = api,
+                enableSsdp = config.ssdpEnabled, fallback = api, spoolDir = File(dataDir, "spool"),
             )
             backupRef.set(backup)
             backup.start()

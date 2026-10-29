@@ -263,9 +263,9 @@ rest in the next run because uploaded files are flagged `IsBackup` on the card.
    WPA2-only help.
 7. Behaviour after a dropped upload: the camera keeps the server's ObjectID as `BackupID` and
    asks for it next time (Browse); given `dlna:uploadedSize` it resumes from that offset, given
-   701 it starts the file over. Resume support (issue #18) would mean keeping pending objects
-   across restarts and honouring the offset; today every pending object is forgotten on
-   restart, so the camera re-sends the file in full.
+   701 it starts the file over. Both targets now spool unfinished uploads, keep pending objects
+   across restarts and accept `Content-Range` on the continuation (issue #18); whether the
+   camera sends exactly that header is the remaining question.
 Run the first session with the app log (or the server status page) visible; every camera
 request is logged. Checked against the NX1100 manual (p. 117 f.): the camera stores the PC
 information itself (our pairing file), backs up only new files, can shut the PC down afterwards

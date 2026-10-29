@@ -39,7 +39,7 @@ class BackupService : Service() {
         Transfers.init(this)
         val sink = buildSink(this, prefs)
         try {
-            server = BackupServer(prefs.identity(), sink, log = LogBus::log).also { it.start() }
+            server = BackupServer(prefs.identity(), sink, log = LogBus::log, spoolDir = java.io.File(filesDir, "spool")).also { it.start() }
             running = true
         } catch (e: Exception) {
             LogBus.log("Start failed: $e")

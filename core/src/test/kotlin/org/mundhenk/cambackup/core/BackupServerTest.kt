@@ -8,6 +8,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
@@ -213,6 +214,86 @@ class BackupServerTest {
         assertEquals(1, server.stats.filesSkipped.get())
         assertTrue(log.any { it.contains("Discarded duplicate SAM_0002.JPG") })
         assertFalse(sink.stored.containsKey("SAM_0002.JPG"))
+    }
+
+    /** #18: with a spool, a cut-off upload is kept and the camera continues it (Content-Range), also after a restart. */
+    @Test
+    fun uploadsResumeFromTheSpool() {
+        val spool = java.nio.file.Files.createTempDirectory("cambackup-spool").toFile()
+        val sink2 = RecordingSink()
+        var srv = BackupServer(identity, sink2, httpPort = 0, log = { log += it }, enableSsdp = false, spoolDir = spool)
+        srv.start()
+        fun url(path: String) = "http://127.0.0.1:${srv.boundPort}$path"
+        fun post(path: String, body: ByteArray, headers: Map<String, String> = emptyMap()): Pair<Int, String> {
+            val c = URL(url(path)).openConnection() as HttpURLConnection
+            c.requestMethod = "POST"; c.doOutput = true; headers.forEach { (k, v) -> c.setRequestProperty(k, v) }
+            c.setFixedLengthStreamingMode(body.size); c.outputStream.use { it.write(body) }
+            val code = c.responseCode; val text = (if (code < 400) c.inputStream else c.errorStream)?.use { it.readBytes().toString(Charsets.UTF_8) } ?: ""
+            c.disconnect(); return code to text
+        }
+        fun soap2(action: String, args: String) = post(UpnpXml.CDS_CONTROL_PATH,
+            """<?xml version="1.0"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><u:$action xmlns:u="${UpnpXml.CDS_SERVICE_TYPE}">$args</u:$action></s:Body></s:Envelope>""".toByteArray(),
+            mapOf("SOAPACTION" to "\"${UpnpXml.CDS_SERVICE_TYPE}#$action\"", "Content-Type" to "text/xml"))
+        fun create(name: String, size: Int): String {
+            val (code, body) = soap2("CreateObject", "<ContainerID>x</ContainerID><Elements>${UpnpXml.escape(didl(name, size.toLong()))}</Elements>")
+            assertEquals(200, code)
+            assertTrue(body, body.contains("dlna:resumeUpload=&quot;1&quot; dlna:uploadedSize=&quot;0&quot;"))
+            return Regex("importUri=&quot;([^&]*)&quot;").find(body)!!.groupValues[1].replace("&amp;", "&").substringAfter("id=")
+        }
+        try {
+            val bytes = ByteArray(1000) { (it * 7).toByte() }
+            val id = create("RESUME.JPG", 1000)
+            // the camera stops after 600 bytes: nothing reaches the sink, the part waits
+            assertEquals(400, post("${UpnpXml.UPLOAD_PATH}?didx=0_id=$id", bytes.copyOfRange(0, 600)).first)
+            assertFalse(sink2.stored.containsKey("RESUME.JPG"))
+            assertEquals(600L, File(spool, "$id.part").length()); assertEquals(600L, srv.uploadedBytes(id))
+            assertTrue(log.any { it == "Upload of RESUME.JPG stopped at 600 of 1000 bytes; kept for the camera to resume" })
+            assertTrue(File(spool, "pending.tsv").readText().startsWith("$id\t2026-10-27\tRESUME.JPG\t1000\t"))
+            // next session: the camera asks about the object and learns how much is there
+            val browsed = soap2("Browse", "<ObjectID>$id</ObjectID><BrowseFlag>BrowseMetadata</BrowseFlag>").second
+            assertTrue(browsed, browsed.contains("dlna:resumeUpload=&quot;1&quot; dlna:uploadedSize=&quot;600&quot;"))
+            // a wrong offset is refused, the right one completes the file
+            assertEquals(416, post("${UpnpXml.UPLOAD_PATH}?didx=0_id=$id", bytes.copyOfRange(100, 1000), mapOf("Content-Range" to "bytes 100-999/1000")).first)
+            assertEquals(200, post("${UpnpXml.UPLOAD_PATH}?didx=0_id=$id", bytes.copyOfRange(600, 1000), mapOf("Content-Range" to "bytes 600-999/1000")).first)
+            assertArrayEquals(bytes, sink2.stored["RESUME.JPG"])
+            assertFalse(File(spool, "$id.part").exists()); assertEquals(0L, srv.uploadedBytes(id))
+            assertFalse(File(spool, "pending.tsv").readText().contains(id))
+            assertTrue(log.any { it == "Resuming RESUME.JPG at 600 of 1000 bytes" } && log.any { it.startsWith("Stored RESUME.JPG (1000 bytes") })
+            assertEquals(404, post("${UpnpXml.UPLOAD_PATH}?didx=0_id=$id", bytes).first)                     // consumed
+            // a restart keeps the pending object and its bytes
+            val id2 = create("LATER.JPG", 1000)
+            assertEquals(400, post("${UpnpXml.UPLOAD_PATH}?didx=0_id=$id2", bytes.copyOfRange(0, 300)).first)
+            // stale leftovers are cleaned on start: a part nobody asked for, and an old part of a pending object
+            File(spool, "UP_2020-01-01_deadbeef00.part").writeBytes(ByteArray(5))
+            val id3 = create("OLD.JPG", 1000)
+            assertEquals(400, post("${UpnpXml.UPLOAD_PATH}?didx=0_id=$id3", bytes.copyOfRange(0, 100)).first)
+            File(spool, "$id3.part").setLastModified(System.currentTimeMillis() - 8L * 24 * 3600 * 1000)
+            srv.stop()
+            srv = BackupServer(identity, sink2, httpPort = 0, log = { log += it }, enableSsdp = false, spoolDir = spool)
+            srv.start()
+            assertTrue(log.toString(), log.any { it == "1 unfinished upload(s) waiting for the camera to resume" })
+            assertFalse(File(spool, "UP_2020-01-01_deadbeef00.part").exists()); assertFalse(File(spool, "$id3.part").exists())
+            assertEquals(500, soap2("Browse", "<ObjectID>$id3</ObjectID><BrowseFlag>BrowseMetadata</BrowseFlag>").first)  // 701: gone
+            assertTrue(soap2("Browse", "<ObjectID>$id2</ObjectID><BrowseFlag>BrowseMetadata</BrowseFlag>").second.contains("dlna:uploadedSize=&quot;300&quot;"))
+            assertEquals(200, post("${UpnpXml.UPLOAD_PATH}?didx=0_id=$id2", bytes.copyOfRange(300, 1000), mapOf("Content-Range" to "bytes 300-999/1000")).first)
+            assertArrayEquals(bytes, sink2.stored["LATER.JPG"])
+            // a camera that starts over without Content-Range simply overwrites the part (and the headers are logged for the record)
+            val id4 = create("AGAIN.JPG", 1000)
+            assertEquals(400, post("${UpnpXml.UPLOAD_PATH}?didx=0_id=$id4", bytes.copyOfRange(0, 200)).first)
+            assertEquals(200, post("${UpnpXml.UPLOAD_PATH}?didx=0_id=$id4", bytes).first)
+            assertArrayEquals(bytes, sink2.stored["AGAIN.JPG"])
+            assertTrue(log.any { it.startsWith("Upload of AGAIN.JPG starts over at 0 although 200 bytes were spooled; request headers:") })
+            // more bytes than announced: dropped
+            val id5 = create("BIG.JPG", 10)
+            assertEquals(400, post("${UpnpXml.UPLOAD_PATH}?didx=0_id=$id5", ByteArray(20)).first)
+            assertFalse(File(spool, "$id5.part").exists()); assertFalse(sink2.stored.containsKey("BIG.JPG"))
+            // unknown size (-1): whatever arrives is the file
+            val (c6, b6) = soap2("CreateObject", "<ContainerID>x</ContainerID><Elements>${UpnpXml.escape("""<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/"><item id="" restricted="0"><dc:title>ANY.JPG</dc:title><res></res></item></DIDL-Lite>""")}</Elements>")
+            assertEquals(200, c6)
+            val id6 = Regex("importUri=&quot;([^&]*)&quot;").find(b6)!!.groupValues[1].replace("&amp;", "&").substringAfter("id=")
+            assertEquals(200, post("${UpnpXml.UPLOAD_PATH}?didx=0_id=$id6", ByteArray(77)).first)
+            assertEquals(77, sink2.stored["ANY.JPG"]!!.size)
+        } finally { srv.stop(); spool.deleteRecursively() }
     }
 
     @Test

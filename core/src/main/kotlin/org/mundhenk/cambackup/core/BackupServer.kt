@@ -3,6 +3,7 @@ package org.mundhenk.cambackup.core
 import org.w3c.dom.Document
 import org.w3c.dom.Element
 import java.io.ByteArrayInputStream
+import java.io.File
 import java.net.InetAddress
 import java.security.SecureRandom
 import java.util.concurrent.ConcurrentHashMap
@@ -43,6 +44,13 @@ class BackupServer(
     private val bindAddress: InetAddress? = null,
     /** Handles everything that is not part of the camera protocol (backend API, web UI). */
     private val fallback: HttpHandler? = null,
+    /**
+     * Where unfinished uploads wait for the camera to resume them (null = no resume: bodies stream
+     * straight into the sink). With a spool the camera is told `dlna:resumeUpload="1"`, a Browse of
+     * a pending object reports `dlna:uploadedSize`, and a POST with `Content-Range: bytes <from>-…`
+     * continues the file; complete files are handed to the sink in one piece.
+     */
+    private val spoolDir: File? = null,
 ) {
     /** What we advertise; see [changeIdentity]. */
     @Volatile var identity: ServerIdentity = identity
@@ -50,6 +58,8 @@ class BackupServer(
     val stats = ServerStats()
     @Volatile private var started = false
     private val pending = ConcurrentHashMap<String, IncomingFile>()
+    private val pendingFile: File? = spoolDir?.let { File(it, "pending.tsv") }
+    init { if (spoolDir != null) restorePending(spoolDir) }
     private val random = SecureRandom()
     private val http = HttpServer(httpPort, ::route, log)
     private var ssdp: SsdpResponder? = null
@@ -173,7 +183,8 @@ class BackupServer(
             "pending object" -> {
                 val f = pendingFile!!
                 val importUri = "http://${req.localAddress}:${boundPort}${UpnpXml.UPLOAD_PATH}?didx=0_id=$id"
-                result(UpnpXml.createObjectDidl(id, id.substringBeforeLast('_'), f.mimeType, dlnaProfileFor(f.mimeType), f.size, importUri, f.upnpClass), 1, 1)
+                result(UpnpXml.createObjectDidl(id, id.substringBeforeLast('_'), f.mimeType, dlnaProfileFor(f.mimeType), f.size, importUri, f.upnpClass,
+                    resumable = spoolDir != null, uploadedSize = uploadedBytes(id)), 1, 1)
             }
             else -> HttpResponse.xml(UpnpXml.soapFault(701, "No such object"), 500)
         }
@@ -222,9 +233,10 @@ class BackupServer(
         val parentId = "UP_${FileSystemSink.safeSegment(file.date)}"
         val objectId = parentId + "_" + ByteArray(5).also { random.nextBytes(it) }.joinToString("") { "%02x".format(it) }
         pending[objectId] = file
+        savePending()
         val importUri = "http://${req.localAddress}:${boundPort}${UpnpXml.UPLOAD_PATH}?didx=0_id=$objectId"
         val (mime, profile) = file.mimeType to dlnaProfileFor(file.mimeType)
-        val didl = UpnpXml.createObjectDidl(objectId, parentId, mime, profile, file.size, importUri, file.upnpClass)
+        val didl = UpnpXml.createObjectDidl(objectId, parentId, mime, profile, file.size, importUri, file.upnpClass, resumable = spoolDir != null)
         log("Ready for ${file.name} (${file.size} bytes, ${file.mimeType}${if (exists) ", duplicate" else ""})")
         return HttpResponse.xml(UpnpXml.soapResponse("CreateObject", UpnpXml.CDS_SERVICE_TYPE,
             "<ObjectID>$objectId</ObjectID><Result>${UpnpXml.escape(didl)}</Result>"))
@@ -232,21 +244,101 @@ class BackupServer(
 
     private fun upload(req: HttpRequest): HttpResponse {
         val objectId = req.query["didx"]?.substringAfter("id=") ?: req.query["id"]
-        val file = objectId?.let { pending.remove(it) }
-        if (file == null) {
+        val file = objectId?.let { pending[it] }
+        if (objectId == null || file == null) {
             log("Upload for unknown object '$objectId' from ${req.remoteAddress}")
             return HttpResponse.notFound()
         }
+        log("Receiving ${file.name} (${if (req.contentLength >= 0) req.contentLength else "chunked"} bytes) from ${req.remoteAddress}")
+        val part = partFile(objectId)
+        if (part == null) { pending.remove(objectId); return storeStreaming(file, req) }
+        return uploadResumable(objectId, file, part, req)
+    }
+
+    /** No spool: the body streams straight into the sink; a short body is the sink's problem (it rejects it). */
+    private fun storeStreaming(file: IncomingFile, req: HttpRequest): HttpResponse {
         val effective = if (file.size < 0 && req.contentLength > 0) file.copy(size = req.contentLength) else file
         stats.lastFile = effective.name
         val started = System.nanoTime()
         val result = sink.store(effective, req.body)
-        val seconds = (System.nanoTime() - started) / 1e9
+        finish(effective, result, started)
+        return HttpResponse.empty(200)
+    }
+
+    /**
+     * With a spool: the body is appended to `<spool>/<objectId>.part` at the offset the camera's
+     * `Content-Range` names (none = from the start); the sink only ever sees complete files.
+     */
+    private fun uploadResumable(objectId: String, file: IncomingFile, part: File, req: HttpRequest): HttpResponse {
+        part.parentFile?.mkdirs()
+        val have = if (part.isFile) part.length() else 0L
+        val offset = req.header("content-range")?.let { Regex("bytes\\s*=?\\s*(\\d+)\\s*-").find(it)?.groupValues?.get(1)?.toLongOrNull() }
+        when {
+            offset == null && have > 0 -> log("Upload of ${file.name} starts over at 0 although $have bytes were spooled; request headers: ${req.headers.entries.joinToString(", ") { "${it.key}=${it.value}" }}")
+            offset != null && offset != have -> {
+                log("Upload of ${file.name}: camera resumes at $offset but $have bytes are spooled -> 416")
+                return HttpResponse(416, ByteArray(0), "text/plain", mapOf("Content-Range" to "bytes */${if (file.size >= 0) file.size.toString() else "*"}"))
+            }
+            offset != null -> log("Resuming ${file.name} at $offset of ${file.size} bytes")
+        }
+        val started = System.nanoTime()
+        java.io.FileOutputStream(part, offset != null && offset > 0).use { out -> req.body.copyTo(out, 256 * 1024) }
+        val total = part.length()
+        val expected = if (file.size >= 0) file.size else total
+        if (total < expected) {
+            log("Upload of ${file.name} stopped at $total of $expected bytes; kept for the camera to resume")
+            return HttpResponse(400, "incomplete".toByteArray(), "text/plain")
+        }
+        if (total > expected) {
+            log("Upload of ${file.name}: $total bytes for a $expected-byte file, dropped")
+            part.delete()
+            return HttpResponse(400, "too much data".toByteArray(), "text/plain")
+        }
+        val effective = if (file.size < 0) file.copy(size = total) else file
+        stats.lastFile = effective.name
+        val result = part.inputStream().use { sink.store(effective, it) }
+        part.delete(); pending.remove(objectId); savePending()
+        finish(effective, result, started)
+        return HttpResponse.empty(200)
+    }
+
+    private fun finish(effective: IncomingFile, result: StoreResult, startedNanos: Long) {
+        val seconds = (System.nanoTime() - startedNanos) / 1e9
         when (result) {
             StoreResult.STORED -> { stats.filesStored.incrementAndGet(); stats.bytesStored.addAndGet(maxOf(effective.size, 0)); log("Stored ${effective.name} (${effective.size} bytes, ${rate(effective.size, seconds)})") }
             StoreResult.ALREADY_EXISTS -> { stats.filesSkipped.incrementAndGet(); log("Discarded duplicate ${effective.name}") }
         }
-        return HttpResponse.empty(200)
+    }
+
+    private fun partFile(objectId: String): File? = spoolDir?.let { File(it, "$objectId.part") }
+
+    /** Bytes of [objectId] already in the spool (0 without a spool or a part). */
+    fun uploadedBytes(objectId: String): Long = partFile(objectId)?.takeIf { it.isFile }?.length() ?: 0L
+
+    /** Pending objects survive a restart (the camera asks for them next session); stale parts are dropped. */
+    private fun restorePending(dir: File) {
+        dir.mkdirs()
+        val f = File(dir, "pending.tsv")
+        if (f.isFile) f.forEachLine { line ->
+            val p = line.split('\t')
+            if (p.size >= 7) pending[p[0]] = IncomingFile(p[2], p[1], p[3].toLongOrNull() ?: -1L, p[4], p[5], p[6])
+        }
+        val weekAgo = System.currentTimeMillis() - 7L * 24 * 3600 * 1000
+        dir.listFiles { x -> x.name.endsWith(".part") }?.forEach { part ->
+            val id = part.name.removeSuffix(".part")
+            if (!pending.containsKey(id) || part.lastModified() < weekAgo) { part.delete(); pending.remove(id); log("Dropped stale partial upload ${part.name}") }
+        }
+        savePending()
+        if (pending.isNotEmpty()) log("${pending.size} unfinished upload(s) waiting for the camera to resume")
+    }
+
+    private fun savePending() {
+        val f = pendingFile ?: return
+        synchronized(f) {
+            f.writeText(pending.entries.sortedBy { it.key }.joinToString("") { (id, x) ->
+                listOf(id, x.date, x.name, x.size.toString(), x.mimeType, x.upnpClass, x.cameraAddress).joinToString("\t", postfix = "\n")
+            })
+        }
     }
 
     /** "12.3 MB/s in 2.1 s" — the camera's Wi-Fi is the usual bottleneck, this makes it visible. */

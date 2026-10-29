@@ -88,10 +88,11 @@ from before chasing a bug that is already fixed.
 * The camera sends at most 1,000 files per run, newest first, and remembers what it sent.
   With more new files on the card, start Auto Backup again; the next run continues with the
   older ones.
-* Stopping Auto Backup on the camera in the middle of a file leaves nothing behind on the
-  phone: the fragment is rejected (log: `short upload of …`), the camera has not flagged the
-  file, and it sends it again next time. An older build may have recorded such a fragment as
-  complete; the sync removes it with a log line and the camera re-sends it as well.
+* Stopping Auto Backup on the camera in the middle of a file leaves nothing half-done in the
+  photo folder: the fragment waits in the app's private storage (log: `kept for the camera to
+  resume`), the camera has not flagged the file, and it continues or re-sends it next time.
+  An older build may have recorded such a fragment as complete; the sync removes it with a
+  log line and the camera re-sends it as well.
 * Several targets, no bookkeeping: phone and home server do not have to be synchronised with
   each other. The camera keeps the only state that matters, per file on the card, and a
   target that is asked about a file it never saw simply says so.

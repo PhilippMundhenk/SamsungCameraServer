@@ -97,8 +97,13 @@ POST ContentDirectory  X_BACKUP_DONE  {UDN, SystemOff}
   `StopTransferResource` are answered generically.
 * Duplicates: the server accepts and discards them (the exact UPnP error code the firmware
   treats as "file exists" is unknown; see [issue #6](https://github.com/PhilippMundhenk/SamsungCameraServer/issues/6)).
-* Resumable uploads exist in the firmware (`dlna:resumeUpload`) but are announced as
-  unsupported; after a dropped connection the camera restarts the file.
+* Resumable uploads: the camera asks for them (`dlna:resumeUpload="1"` in its CreateObject
+  DIDL) and both targets now answer the same way. A cut-off upload is kept in a spool
+  (`<data>/spool` on the server, the app's private storage on the phone); a Browse of the
+  object reports `dlna:uploadedSize`, and a POST with `Content-Range: bytes <from>-…`
+  continues from there. Whether the NX1000 really sends that header on resume is not
+  confirmed yet ([issue #18](https://github.com/PhilippMundhenk/SamsungCameraServer/issues/18));
+  a POST without it starts the file over, which is what happened before as well.
 * Networking: SSDP is multicast with TTL 2, so the target must be on the camera's L2 segment
   (same Wi-Fi, the phone's hotspot, or host/macvlan networking for the container). Ports:
   52235/tcp, 1900/udp.

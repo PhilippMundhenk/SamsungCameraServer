@@ -134,9 +134,11 @@ the camera says how many files it will send. `0 files announced` means every fil
 is already flagged as backed up (the flag is per file, not per target: what the phone received
 under the same UDN is not offered to the server again, and vice versa).
 
-`handler error for PUT …: short upload of <file>: X of Y bytes` is the phone (or a camera
-upload) that stopped mid-file; nothing is kept and the sender tries again. Stopping Auto
-Backup on the camera produces exactly this once.
+`handler error for PUT …: short upload of <file>: X of Y bytes` is the phone that stopped
+mid-file; nothing is kept and the phone tries again. A camera upload that stops is spooled
+instead (`Upload of <file> stopped at X of Y bytes; kept for the camera to resume`): the
+partial file waits in `<data>/spool` for the camera's next session, which can continue it
+(`Resuming <file> at X of Y bytes`) or start it over. Parts older than a week are dropped.
 
 The camera shows the server's name as soon as the pairing file is on the card; that proves
 nothing about the network. It then searches with SSDP (`ST: urn:schemas-upnp-org:device:MediaServer:1`)

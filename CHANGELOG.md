@@ -24,6 +24,10 @@ All notable changes to this project are documented here. The format follows
   as such ("use http:// instead of https://"), the app warns under the URL field while typing,
   adds `http://` when no scheme was typed and names the reason when the server's identity
   cannot be read ("the server does not speak TLS ...", "HTTP 404").
+- Resumable uploads (#18): unfinished camera uploads are spooled (`<data>/spool` on the
+  server, private storage on the phone), survive restarts, are reported to the camera as
+  `dlna:uploadedSize` and continued from a `Content-Range` POST; the sinks only ever see
+  complete files.
 - Server: per-camera settings (#19): folder layout, every pipeline stage and the hooks can be
   set per camera on the settings page (`camera.<id>.<key>`, blank = inherit); the status page
   lists a camera's own settings.

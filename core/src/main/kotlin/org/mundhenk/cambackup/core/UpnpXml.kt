@@ -159,10 +159,11 @@ object UpnpXml {
     fun createObjectDidl(
         objectId: String, parentId: String, mimeType: String, dlnaProfile: String,
         size: Long, importUri: String, upnpClass: String,
+        resumable: Boolean = false, uploadedSize: Long = 0,
     ): String = """<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:dlna="urn:schemas-dlna-org:metadata-1-0/" xmlns:sec="http://www.sec.co.kr/">
   <item id="$objectId" parentID="$parentId" restricted="0" dlna:dlnaManaged="00000004">
     <dc:title></dc:title>
-    <res protocolInfo="http-get:*:$mimeType:$dlnaProfile;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=00D00000000000000000000000000000" importUri="${escape(importUri)}" dlna:resumeUpload="0" dlna:uploadedSize="0" size="$size"></res>
+    <res protocolInfo="http-get:*:$mimeType:$dlnaProfile;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=00D00000000000000000000000000000" importUri="${escape(importUri)}" dlna:resumeUpload="${if (resumable) 1 else 0}" dlna:uploadedSize="$uploadedSize" size="$size"></res>
     <upnp:class>${escape(upnpClass)}</upnp:class>
   </item>
 </DIDL-Lite>"""
