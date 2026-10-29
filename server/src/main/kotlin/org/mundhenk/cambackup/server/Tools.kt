@@ -28,17 +28,24 @@ class Tools(private val log: (String) -> Unit, private val searchPath: List<File
         return program
     }
 
-    /** True if [program] can be started. Probed once per name. */
+    /**
+     * True if [program] can be started and answers its version call within a minute. Probed once
+     * per name. The output is drained on its own thread so a tool that never exits (or needs a
+     * long first start, like RawTherapee building its caches on a slow box) cannot block the probe.
+     */
     fun has(program: String): Boolean = available.getOrPut(program) {
         try {
             val p = ProcessBuilder(resolve(program), versionFlag(program)).redirectErrorStream(true).start()
-            p.inputStream.use { it.readBytes() }
-            p.waitFor(20, TimeUnit.SECONDS)
-            true
+            Thread({ try { p.inputStream.use { it.readBytes() } } catch (_: IOException) {} }, "cambackup-probe").apply { isDaemon = true }.start()
+            val finished = p.waitFor(PROBE_TIMEOUT_SEC, TimeUnit.SECONDS)
+            if (!finished) { p.destroyForcibly(); log("$program did not answer within ${PROBE_TIMEOUT_SEC}s, treated as unavailable") }
+            finished
         } catch (_: IOException) {
             false
         }
     }
+
+    private companion object { const val PROBE_TIMEOUT_SEC = 60L }
 
     private fun versionFlag(program: String) = when {
         program.contains("exiftool") -> "-ver"

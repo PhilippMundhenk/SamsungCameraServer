@@ -67,7 +67,8 @@ docker logs cambackup-smoke 2>&1 | grep -q "Shifted EXIF dates" && echo "ok  exi
 RT_OUT=$(docker run --rm --entrypoint rawtherapee-cli "$IMG" --version 2>&1 || true)
 echo "$RT_OUT" | grep -q "RawTherapee" || { echo "FAIL: rawtherapee-cli missing in the image: $RT_OUT"; exit 1; }
 docker run --rm --entrypoint sh "$IMG" -c 'command -v dcraw_emu >/dev/null' || { echo "FAIL: dcraw_emu missing in the image"; exit 1; }
-for i in $(seq 1 30); do curl -s -m 5 "http://127.0.0.1:$PORT/" | grep -q 'rawtherapee-cli &#10003;' && break; sleep 1; done
+# the probe runs in the background and RawTherapee's first start can take a while on a slow runner
+for i in $(seq 1 150); do curl -s -m 5 "http://127.0.0.1:$PORT/" | grep -q 'rawtherapee-cli &#10003;' && break; sleep 1; done
 curl -s -m 5 "http://127.0.0.1:$PORT/" | grep -q 'rawtherapee-cli &#10003;' || { echo "FAIL: status page does not show rawtherapee-cli as available"; curl -s "http://127.0.0.1:$PORT/" | grep -o 'Tools:.*</p>'; exit 1; }
 echo "ok  RAW developer (rawtherapee-cli) and dcraw_emu available in the image"
 echo "CONTAINER SMOKE PASSED"
