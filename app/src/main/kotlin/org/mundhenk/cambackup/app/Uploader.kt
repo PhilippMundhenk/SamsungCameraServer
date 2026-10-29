@@ -55,7 +55,8 @@ object Uploader {
         return true
     }
 
-    /** Synchronous variant, returns the summary line (logged unless [logSummary] is false). */
+    /** Synchronous variant, returns the summary line (logged unless [logSummary] is false). One run at a time. */
+    @Synchronized
     fun sync(context: Context, mimeOf: (String) -> String = ::mimeFor, logSummary: Boolean = true): String {
         val prefs = Prefs(context)
         Transfers.init(context)
@@ -71,14 +72,23 @@ object Uploader {
             }
         }
         if (logSummary) LogBus.log(summary)
+        AutoSync.schedule(context)       // keeps trying later when files are left, stops when done or disabled
         return summary
     }
 
     private fun upload(context: Context, prefs: Prefs, backend: BackendSink, pending: List<Transfer>, mimeOf: (String) -> String): String {
         val local = Sinks.direct(context, prefs.folderUri)
-        var uploaded = 0; var missing = 0; var failed = 0
+        var uploaded = 0; var missing = 0; var failed = 0; var incomplete = 0
         backend.onBackupStart("phone")
         for (t in pending) {
+            val onPhone = local.sizeOf(t.date, t.name)
+            if (onPhone >= 0 && t.size >= 0 && onPhone != t.size) {
+                // the camera stopped mid-file (older builds recorded it anyway): drop it, the camera sends it again
+                incomplete++
+                LogBus.log("Sync: ${t.name} is incomplete on the phone (${Ui.formatSize(onPhone)} of ${Ui.formatSize(t.size)}), removed; the camera will send it again")
+                local.delete(t.date, t.name); Transfers.remove(t.date, t.name)
+                continue
+            }
             val input = try { local.open(t.date, t.name) } catch (e: IOException) { null }
             if (input == null) { missing++; LogBus.log("Sync: ${t.name} is no longer on the phone"); continue }
             val file = IncomingFile(t.name, t.date, t.size, mimeOf(t.name), if (mimeOf(t.name).startsWith("video/")) "object.item.videoItem" else "object.item.imageItem", "phone")
@@ -93,7 +103,7 @@ object Uploader {
             }
         }
         backend.onBackupDone("phone", false)
-        return "Sync: $uploaded uploaded, $failed failed, $missing missing"
+        return "Sync: $uploaded uploaded, $failed failed, $missing missing" + (if (incomplete > 0) ", $incomplete incomplete" else "")
     }
 
     fun mimeFor(name: String): String = when (name.substringAfterLast('.', "").lowercase()) {

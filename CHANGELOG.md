@@ -24,6 +24,15 @@ All notable changes to this project are documented here. The format follows
   as such ("use http:// instead of https://"), the app warns under the URL field while typing,
   adds `http://` when no scheme was typed and names the reason when the server's identity
   cannot be read ("the server does not speak TLS ...", "HTTP 404").
+- Android: the upload to the home server keeps going on its own (WorkManager: right away,
+  with backoff while the server is unreachable, and every 15 minutes as a safety net, also
+  with the app closed) until everything is on the server; *Upload automatically* in Settings
+  switches it off. Tapping a file in the list opens it in the phone's viewer; JPEGs show a
+  preview.
+- Fixed: an upload the camera stopped mid-file (cancelled on the camera) was recorded on the
+  phone as complete and then failed to sync ("short upload"). Both phone sinks and the core
+  file sink now reject short uploads; the uploader drops an incomplete file it finds (the
+  camera sends it again).
 - Fixed: the second Auto Backup session stalled on both targets. After X_BACKUP_START the
   NX1000 browses the last object of its previous session; the server answered with an empty
   result and the camera waited forever. Browse now serves a small content tree (root with an

@@ -18,6 +18,12 @@
     <string name="hotspot_no_settings">This phone has no hotspot settings screen the app can open; turn the hotspot on from the quick settings.</string>
     <string name="sync_now_pending">Sync to server (%1$d waiting)</string>
     <string name="sync_running">Syncing…</string>
+    <string name="sync_auto_pending">Sync now (%1$d waiting) · automatic</string>
+    <string name="auto_sync_title">Upload automatically</string>
+    <string name="auto_sync_summary">Keep uploading to the home server whenever it is reachable, also after the app is closed, until everything is there.</string>
+    <string name="open_not_on_phone">%1$s is not on this phone</string>
+    <string name="open_no_app">No app on this phone can open %1$s</string>
+    <string name="thumbnail_description">Preview</string>
     <string name="sync_already_running">Sync is already running</string>
     <string name="transfers_title">Transferred photos</string>
     <string name="transfers_title_n">Transferred photos (%1$d)</string>

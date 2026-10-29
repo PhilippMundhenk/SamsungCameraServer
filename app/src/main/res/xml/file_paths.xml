@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Files the app may hand to other apps (tap on a transfer): the app-private photo folder. -->
+<paths>
+    <external-files-path name="external" path="." />
+    <files-path name="files" path="." />
+</paths>

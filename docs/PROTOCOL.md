@@ -50,7 +50,9 @@ date + name + size on their own.
      ("No Such Exist → CreateObject Retry").
    An HTTP 200 with an empty `Result` is neither and the camera waits forever on its transfer
    screen (seen on the NX1000; fixed in 0.2.0).
-4. After a successful upload `IsBackup` is set.
+4. After a successful upload `IsBackup` is set. An upload stopped on the camera arrives short
+   (fewer bytes than `res@size`); the server must drop the fragment, the camera keeps the
+   `BackupID` and goes through step 3 for that file next time.
 
 Consequence for several targets: **no synchronisation between the phone and the home server is
 needed.** The only state that crosses sessions is per file on the card (`IsBackup`,

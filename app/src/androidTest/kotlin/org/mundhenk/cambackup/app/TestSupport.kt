@@ -17,8 +17,17 @@ object TestSupport {
     val context: Context get() = InstrumentationRegistry.getInstrumentation().targetContext
 
     /** Fresh prefs + transfer list + log, service stopped, no system dialog in the way. */
+    @Volatile private var workManagerReady = false
+
     fun reset(mode: Mode = Mode.PHONE, setupDone: Boolean = true) {
         clearScreen()
+        if (!workManagerReady) {
+            // synchronous WorkManager: jobs run only when the test meets their constraints
+            androidx.work.testing.WorkManagerTestInitHelper.initializeTestWorkManager(context)
+            workManagerReady = true
+        }
+        androidx.work.WorkManager.getInstance(context).cancelAllWork()
+        Thumbnails.clear()
         if (BackupService.running) { BackupService.stop(context); waitFor { !BackupService.running } }
         context.getSharedPreferences("cambackup", Context.MODE_PRIVATE).edit().clear().commit()
         Prefs(context).apply { this.mode = mode; this.setupDone = setupDone; serverName = "[PC]UITest" }

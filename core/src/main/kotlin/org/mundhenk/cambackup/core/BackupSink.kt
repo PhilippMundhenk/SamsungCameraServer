@@ -1,6 +1,7 @@
 package org.mundhenk.cambackup.core
 
 import java.io.File
+import java.io.IOException
 import java.io.InputStream
 
 /** Metadata the camera sends in CreateObject before uploading a file. */
@@ -51,7 +52,12 @@ class FileSystemSink(private val root: File) : BackupSink {
         val f = target(file)
         f.parentFile?.mkdirs()
         val tmp = File(f.parentFile, f.name + ".part")
-        tmp.outputStream().use { out -> input.copyTo(out) }
+        val written = tmp.outputStream().use { out -> input.copyTo(out) }
+        if (file.size >= 0 && written != file.size) {
+            // the camera (or the user, on the camera) stopped mid-file: keep nothing, the camera sends it again
+            tmp.delete()
+            throw IOException("short upload of ${file.name}: $written of ${file.size} bytes")
+        }
         if (!tmp.renameTo(f)) {
             tmp.copyTo(f, overwrite = true); tmp.delete()
         }

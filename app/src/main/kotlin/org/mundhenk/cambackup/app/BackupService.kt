@@ -105,7 +105,7 @@ class BackupService : Service() {
                 val sync = prefs.mode == Mode.PHONE_AND_SERVER
                 LogBus.log("Mode: ${if (sync) "phone + server" else "phone"} → ${prefs.folderUri ?: Sinks.defaultFolder(context)}" + if (sync) " → ${prefs.backendUrl}" else "")
                 RecordingSink(local, TransferState.ON_PHONE, local::describe) {
-                    if (sync) Uploader.syncInBackground(context)
+                    if (sync) { Uploader.syncInBackground(context); AutoSync.schedule(context) }
                 }
             }
             Mode.SERVER -> {

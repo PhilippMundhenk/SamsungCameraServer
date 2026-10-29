@@ -107,6 +107,13 @@ class SyncAndServerModeTest {
         prefs.backendToken = "tok"
         assertTrue(Uploader.sync(context).contains("1 uploaded, 0 failed, 1 missing"))
         assertEquals(TransferState.ON_SERVER, Transfers.get("2026-10-27", "A.JPG")!!.state)
+        // a file the camera did not finish (fewer bytes than recorded) is dropped so the camera sends it again
+        File(Sinks.defaultFolder(context), "2026-10-27/PART.JPG").writeBytes(ByteArray(5))
+        Transfers.record("2026-10-27", "PART.JPG", 50, TransferState.ON_PHONE, "x")
+        assertTrue(Uploader.sync(context).endsWith("0 uploaded, 0 failed, 1 missing, 1 incomplete"))
+        org.junit.Assert.assertNull(Transfers.get("2026-10-27", "PART.JPG"))
+        assertFalse(File(Sinks.defaultFolder(context), "2026-10-27/PART.JPG").exists())
+        assertTrue(LogBus.snapshot().any { it.contains("PART.JPG is incomplete on the phone") })
         // nothing left / no url / wrong mode
         Transfers.clear()
         assertEquals("Sync: everything is on the server", Uploader.sync(context))
@@ -124,6 +131,44 @@ class SyncAndServerModeTest {
         assertTrue(Uploader.lastResult.startsWith("Sync:"))
         assertEquals("image/jpeg", Uploader.mimeFor("x.JPEG")); assertEquals("video/quicktime", Uploader.mimeFor("x.mov"))
         assertEquals("video/x-msvideo", Uploader.mimeFor("x.avi")); assertEquals("application/octet-stream", Uploader.mimeFor("x"))
+    }
+
+    /** One tap (or one session) is enough: WorkManager keeps retrying until the server has everything. */
+    @Test
+    fun autoSyncKeepsTryingUntilTheServerHasEverything() {
+        val prefs = Prefs(context)
+        File(Sinks.defaultFolder(context), "2026-10-27").mkdirs()
+        File(Sinks.defaultFolder(context), "2026-10-27/AUTO.JPG").writeBytes(ByteArray(10))
+        Transfers.record("2026-10-27", "AUTO.JPG", 10, TransferState.ON_PHONE, "x")
+        backend.stop()                                                             // home server not reachable yet
+        AutoSync.schedule(context)
+        val wm = androidx.work.WorkManager.getInstance(context)
+        val driver = androidx.work.testing.WorkManagerTestInitHelper.getTestDriver(context)!!
+        var now = wm.getWorkInfosForUniqueWork(AutoSync.WORK_NOW).get().single()
+        assertEquals(1, wm.getWorkInfosForUniqueWork(AutoSync.WORK_PERIODIC).get().size)
+        assertTrue(LogBus.snapshot().any { it.contains("Auto-sync: 1 file(s) waiting") })
+        driver.setAllConstraintsMet(now.id)                                        // runs synchronously: server down -> retry later
+        now = wm.getWorkInfosForUniqueWork(AutoSync.WORK_NOW).get().single()
+        assertEquals(androidx.work.WorkInfo.State.ENQUEUED, now.state); assertEquals(1, now.runAttemptCount)
+        assertEquals(TransferState.ON_PHONE, Transfers.get("2026-10-27", "AUTO.JPG")!!.state)
+        // server back: the next attempt uploads, then every job is cancelled
+        backend = TestSupport.FakeBackend("tok").start(); prefs.backendUrl = backend.url
+        wm.cancelUniqueWork(AutoSync.WORK_NOW); AutoSync.schedule(context)
+        now = wm.getWorkInfosForUniqueWork(AutoSync.WORK_NOW).get().first { !it.state.isFinished }
+        driver.setAllConstraintsMet(now.id)
+        waitFor { Transfers.get("2026-10-27", "AUTO.JPG")!!.state == TransferState.ON_SERVER }
+        assertTrue(wm.getWorkInfosForUniqueWork(AutoSync.WORK_PERIODIC).get().all { it.state == androidx.work.WorkInfo.State.CANCELLED })
+        // switched off, or nothing waiting: nothing is scheduled
+        File(Sinks.defaultFolder(context), "2026-10-27/B.JPG").writeBytes(ByteArray(3))
+        Transfers.record("2026-10-27", "B.JPG", 3, TransferState.ON_PHONE, "x")
+        prefs.autoSync = false; AutoSync.schedule(context)
+        assertTrue(wm.getWorkInfosForUniqueWork(AutoSync.WORK_NOW).get().all { it.state.isFinished })
+        // a worker that runs while auto-sync is off does nothing
+        prefs.autoSync = false
+        assertEquals(androidx.work.ListenableWorker.Result.success(),
+            androidx.work.testing.TestWorkerBuilder.from(context, androidx.work.OneTimeWorkRequestBuilder<AutoSync.SyncWorker>().build(),
+                java.util.concurrent.Executors.newSingleThreadExecutor()).build().doWork())
+        prefs.autoSync = true
     }
 
     @Test

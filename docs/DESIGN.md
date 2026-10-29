@@ -63,12 +63,15 @@ per file:
        res@protocolInfo (*:*:image/jpeg:…), res@size
        ← response DIDL with res@importUri
   POST <importUri>  (raw bytes, Content-Length = size)  ← 200
-POST …ContentDirectory1  X_BACKUP_DONE {UDN, SysOff}
+POST …ContentDirectory1  X_BACKUP_DONE {UDN, SystemOff}
 ```
-Other actions the firmware can issue (all answered generically): Browse, DestroyObject,
-GetTransferProgress, StopTransferResource, ConnectionManager GetProtocolInfo.
+Before a file whose upload did not finish last time the camera issues `Browse` for the object
+id it stored for it and expects the item or UPnP error 701 (PROTOCOL.md, "Per file"); the
+server keeps a tiny content tree for that. The other actions the firmware can issue are
+answered generically: DestroyObject, GetTransferProgress, StopTransferResource,
+ConnectionManager GetProtocolInfo.
 Firmware details worth remembering:
-* `SysOff` = camera's "shut down PC after backup" option; we expose it as a sink callback.
+* `SystemOff` = camera's "shut down PC after backup" option; we expose it as a sink callback.
 * "File Exist!!! CreateObject Return %d": the camera treats some UPnP error from CreateObject
   as "already backed up" and moves on. The exact code is unknown → `fileExistsErrorCode`
   option (default off: accept and discard duplicates instead). Capture a real session to
@@ -127,7 +130,11 @@ app/   (Android, minSdk 26, Views + Material 3, ViewBinding; tokens from docs/BR
                    open() for later upload; BackendSink lives in core
   Transfers        the ✓/✓✓ list, persisted as transfers.tsv (append, last line wins)
   Uploader         RecordingSink (records every stored file) + deferred upload of ON_PHONE
-                   entries to the home server (after each session, "Sync to server")
+                   entries to the home server (after each session, on "Sync now", from AutoSync)
+  AutoSync         WorkManager jobs that keep calling Uploader until nothing is pending: one
+                   right away (backoff while the server is unreachable) + periodic every 15 min
+  Thumbnails       downscaled JPEG previews for the list, decoded off the main thread, LRU cache
+  Hotspot          opens the system's hotspot settings (apps cannot switch the hotspot on)
   Prefs            SharedPreferences; Mode PHONE | PHONE_AND_SERVER | SERVER; UDN generated once
   LogBus           in-process log ring buffer feeding the UI
 ```
@@ -180,7 +187,9 @@ app/   (Android, minSdk 26, Views + Material 3, ViewBinding; tokens from docs/BR
 | UDN | Settings field + "New UDN" | must keep Samsung prefix; regenerating requires re-pairing |
 | Export pairing file | wizard step 3, Settings | `SAMSUNGAutoBackupDESC.zip` via system file picker |
 | Start / Stop | status card / notification action | foreground service |
-| Sync to server | status card (phone + server mode) | uploads every ✓ file; also runs after each camera session |
+| Sync now | status card (phone + server mode) | forces an upload attempt; AutoSync keeps uploading on its own until every ✓ is ✓✓ (switch in Settings) |
+| Hotspot | status card | opens the system's hotspot settings; Android lets no app switch the hotspot on itself |
+| Tap on a transfer | list | opens the file in the phone's viewer (FileProvider URI or SAF document URI); JPEGs show a preview |
 | Transfer list | main screen | newest first; ✓ on phone, ✓✓ on server; "Clear list" in the overflow menu |
 | Log | toolbar → Log screen | last 400 lines, also in logcat tag `CamBackup` |
 
@@ -247,8 +256,11 @@ rest in the next run because uploaded files are flagged `IsBackup` on the card.
 4. Does the camera require the device description's `SERVER:` / `modelName` values, or is the
    UDN enough? (We mirror pc-autobackup's values to be safe.)
 5. Multiple saved Wi-Fi networks on the camera — confirm the remembered-network list.
-6. Hotspot: Android's hotspot interface must deliver multicast to the app — verify on the
-   target phone (known to work for DLNA servers, but vendor ROMs differ).
+6. ~~Hotspot: Android's hotspot interface must deliver multicast to the app — verify on the
+   target phone.~~ Verified (Samsung phone, `swlan0`): the camera's search is answered and the
+   files arrive, once the interface is joined after it comes up (SsdpResponder re-checks every
+   5 s). The slow part is the 2012 camera associating with a modern hotspot: 2.4 GHz and
+   WPA2-only help.
 7. Behaviour after a dropped upload: the camera keeps the server's ObjectID as `BackupID` and
    asks for it next time (Browse); given `dlna:uploadedSize` it resumes from that offset, given
    701 it starts the file over. Resume support (issue #18) would mean keeping pending objects

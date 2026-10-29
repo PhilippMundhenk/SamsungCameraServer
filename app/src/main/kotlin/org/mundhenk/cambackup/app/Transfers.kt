@@ -74,6 +74,14 @@ object Transfers {
     @Synchronized
     fun get(date: String, name: String): Transfer? = entries[Transfer(date, name, 0, TransferState.ON_PHONE, 0, "").key]
 
+    /** Drops one entry (an incomplete file that was deleted). */
+    @Synchronized
+    fun remove(date: String, name: String) {
+        if (entries.remove(Transfer(date, name, 0, TransferState.ON_PHONE, 0, "").key) == null) return
+        file?.writeText(entries.values.joinToString("") { t -> listOf(t.date, t.name, t.size.toString(), t.state.name, t.at.toString(), t.location).joinToString("\t", postfix = "\n") })
+        notifyListeners()
+    }
+
     @Synchronized
     fun clear() {
         entries.clear()

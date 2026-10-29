@@ -34,7 +34,8 @@ One pairing file on the SD card serves both.
 4. Tap **Start server** (on the road: **Hotspot** first, it opens the phone's hotspot
    settings). On the camera: Wi-Fi → *Auto Backup*, connect to the phone's hotspot or the same
    Wi-Fi. The camera uploads everything it has not backed up yet.
-5. Watch the list: ✓ = on the phone, ✓✓ = on the home server.
+5. Watch the list: ✓ = on the phone, ✓✓ = on the home server. Tap a file to open it. The
+   upload to the home server runs on its own whenever the server is reachable.
 
 Details, modes and tips: [docs/APP.md](docs/APP.md).
 
@@ -80,6 +81,7 @@ web UI and is explained in [docs/SERVER.md](docs/SERVER.md).
 * [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — building, tests and coverage, CI, releases, known gaps
 * [docs/DESIGN.md](docs/DESIGN.md) — design notes and decisions, [docs/BRANDING.md](docs/BRANDING.md) — look and feel
 
-Status: complete against a simulated camera; the first run against a real camera is
+Status: in daily use with a real NX1000, against the home server at home and the app on the
+phone's hotspot on the road. Remaining camera questions are collected in
 [issue #6](https://github.com/PhilippMundhenk/SamsungCameraServer/issues/6). Questions and
 problems: [GitHub issues](https://github.com/PhilippMundhenk/SamsungCameraServer/issues).

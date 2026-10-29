@@ -10,7 +10,7 @@ Chosen in the setup wizard (first start) or in Settings:
 | Mode | What happens | List mark |
 |---|---|---|
 | **Phone only** | files are kept in a folder on the phone | ✓ |
-| **Phone + home server** | kept on the phone and uploaded to the home server after every session and on "Sync to server" (whenever the server is reachable) | ✓ → ✓✓ |
+| **Phone + home server** | kept on the phone and uploaded to the home server on their own, whenever it is reachable (also with the app closed); **Sync now** forces an attempt | ✓ → ✓✓ |
 | **Home server only** | streamed straight to the home server, nothing stays on the phone | ✓✓ |
 
 The folder defaults to the app's own storage (`Android/data/org.mundhenk.cambackup/files/CamBackup`);
@@ -51,8 +51,13 @@ which makes the cards that still carry it work again.
    its name and uploads everything it has not backed up yet.
 3. Every file appears in the list with its state. The Log screen (overflow menu) shows each
    request, which is the first place to look when the camera does not find the phone.
-4. Phone + home server: at home, tap **Sync to server** (or just finish a session on the home
-   Wi-Fi); ✓ turns into ✓✓ when the server has the file.
+4. Phone + home server: the upload to the home server happens on its own. After a session,
+   and whenever the phone has a network again, the app tries to reach the server and uploads
+   what is waiting, also while the app is closed (a background job every 15 minutes as the
+   safety net), until ✓ has turned into ✓✓ for every file. **Sync now** forces an attempt;
+   *Upload automatically* in Settings switches the automatic part off.
+5. Tap a file in the list to open it in the phone's gallery or video player; JPEGs show a
+   preview in the list.
 
 Settings are locked while the server runs. "Clear list" in the overflow menu only clears the
 list, not the files.
@@ -81,3 +86,10 @@ from before chasing a bug that is already fixed.
 * The camera sends at most 1,000 files per run, newest first, and remembers what it sent.
   With more new files on the card, start Auto Backup again; the next run continues with the
   older ones.
+* Stopping Auto Backup on the camera in the middle of a file leaves nothing behind on the
+  phone: the fragment is rejected (log: `short upload of …`), the camera has not flagged the
+  file, and it sends it again next time. An older build may have recorded such a fragment as
+  complete; the sync removes it with a log line and the camera re-sends it as well.
+* Several targets, no bookkeeping: phone and home server do not have to be synchronised with
+  each other. The camera keeps the only state that matters, per file on the card, and a
+  target that is asked about a file it never saw simply says so.

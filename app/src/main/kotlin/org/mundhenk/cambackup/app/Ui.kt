@@ -13,6 +13,23 @@ import java.util.Locale
 
 /** Small view helpers shared by the activities. */
 object Ui {
+    /** Tap on a transfer: hand the file to the phone's viewer (gallery, video player, ...). */
+    fun openTransfer(activity: Activity, prefs: Prefs, t: Transfer) {
+        val uri = runCatching { Sinks.direct(activity, prefs.folderUri).uriOf(t.date, t.name) }.getOrNull()
+        if (uri == null) {
+            val msg = activity.getString(R.string.open_not_on_phone, t.name)
+            LogBus.log(msg); android.widget.Toast.makeText(activity, msg, android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW)
+            .setDataAndType(uri, Uploader.mimeFor(t.name))
+            .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        try { activity.startActivity(intent) } catch (e: android.content.ActivityNotFoundException) {
+            val msg = activity.getString(R.string.open_no_app, t.name)
+            LogBus.log(msg); android.widget.Toast.makeText(activity, msg, android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
     /** Live hint under a server-URL field: https:// does not work against the plain-HTTP home server. */
     fun warnAboutHttps(field: android.widget.EditText, layout: com.google.android.material.textfield.TextInputLayout) {
         fun update(text: CharSequence?) {

@@ -1,6 +1,7 @@
 package org.mundhenk.cambackup.app
 
 import android.Manifest
+import android.content.Intent
 import android.os.Build
 import androidx.test.core.app.ActivityScenario
 import androidx.test.espresso.Espresso.onView
@@ -64,7 +65,11 @@ class MainFlowTest {
             onView(withId(R.id.status)).check(matches(withText(R.string.status_running)))
 
             val rnd = Random(7)
-            val jpg = ByteArray(2_000_000).also { rnd.nextBytes(it) }
+            // a real (tiny) JPEG so the list can show a preview; the SRW is random bytes (no preview, icon)
+            val jpg = java.io.ByteArrayOutputStream().also { out ->
+                android.graphics.Bitmap.createBitmap(640, 480, android.graphics.Bitmap.Config.ARGB_8888).apply { eraseColor(android.graphics.Color.rgb(200, 40, 40)) }
+                    .compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, out)
+            }.toByteArray()
             val srw = ByteArray(1_000_000).also { rnd.nextBytes(it) }
             val sim = CameraSimulator("127.0.0.1", BackupServer.DEFAULT_HTTP_PORT) { android.util.Log.i("UITest", it) }
             val result = sim.runBackup(listOf(
@@ -86,6 +91,32 @@ class MainFlowTest {
             waitForUi { onView(withText("SAM_0042.SRW")).check(matches(isDisplayed())) }
             onView(withId(R.id.transfersTitle)).check(matches(withSubstring("(2)")))
             onView(withId(R.id.empty)).check(matches(org.hamcrest.Matchers.not(isDisplayed())))
+            // previews: the JPEG decodes (downscaled), the RAW does not
+            val preview = Thumbnails.decode { stored.inputStream() }
+            assertTrue(preview != null && preview.width in 100..320)
+            assertTrue(Thumbnails.decode { File(File(folder, "2026-10-26"), "SAM_0042.SRW").inputStream() } == null)
+            assertTrue(Thumbnails.decode { null } == null)
+            // tapping a row hands the file to a viewer app (stubbed here)
+            androidx.test.espresso.intent.Intents.init()
+            try {
+                androidx.test.espresso.intent.Intents.intending(androidx.test.espresso.intent.matcher.IntentMatchers.hasAction(Intent.ACTION_VIEW))
+                    .respondWith(android.app.Instrumentation.ActivityResult(android.app.Activity.RESULT_OK, null))
+                onView(withText("SAM_0042.JPG")).perform(click())
+                androidx.test.espresso.intent.Intents.intended(org.hamcrest.Matchers.allOf(
+                    androidx.test.espresso.intent.matcher.IntentMatchers.hasAction(Intent.ACTION_VIEW),
+                    androidx.test.espresso.intent.matcher.IntentMatchers.hasType("image/jpeg"),
+                    androidx.test.espresso.intent.matcher.IntentMatchers.hasFlag(Intent.FLAG_GRANT_READ_URI_PERMISSION)))
+                val uri = androidx.test.espresso.intent.Intents.getIntents().first { it.action == Intent.ACTION_VIEW }.data!!
+                assertEquals("content", uri.scheme); assertEquals("${context.packageName}.files", uri.authority)
+                assertEquals(jpg.size, context.contentResolver.openInputStream(uri)!!.use { it.readBytes() }.size)
+            } finally { androidx.test.espresso.intent.Intents.release() }
+            // a file that is gone from the phone cannot be opened
+            Transfers.record("2026-10-26", "GONE.JPG", 1, TransferState.ON_PHONE, "x")
+            waitForUi { onView(withText("GONE.JPG")).check(matches(isDisplayed())) }
+            onView(withText("GONE.JPG")).perform(click())
+            waitFor { LogBus.snapshot().any { l -> l.contains("GONE.JPG is not on this phone") } }
+            Transfers.remove("2026-10-26", "GONE.JPG")
+            waitFor { Transfers.list().size == 2 }
 
             // second run is deduplicated
             sim.runBackup(listOf(CameraSimulator.SimFile("SAM_0042.JPG", "2026-10-26", "image/jpeg", jpg)))

@@ -44,6 +44,7 @@ class SettingsActivity : AppCompatActivity() {
         Ui.warnAboutHttps(b.backendUrl, b.backendUrlLayout)
         b.versionLabel.text = getString(R.string.version_label, BuildConfig.VERSION_NAME)
         b.backendToken.setText(prefs.backendToken)
+        b.autoSync.isChecked = prefs.autoSync
         b.serverName.setText(prefs.serverName)
         b.udn.setText(prefs.udn)
         b.regenerate.setOnClickListener {
@@ -114,7 +115,7 @@ class SettingsActivity : AppCompatActivity() {
         super.onResume()
         val locked = BackupService.running
         b.lockedNotice.visibility = if (locked) View.VISIBLE else View.GONE
-        for (v in listOf(b.modePhone, b.modePhoneAndServer, b.modeServer, b.chooseFolder, b.resetFolder, b.backendUrl, b.backendToken, b.serverName, b.udn, b.regenerate, b.deviceNickname)) v.isEnabled = !locked
+        for (v in listOf(b.modePhone, b.modePhoneAndServer, b.modeServer, b.chooseFolder, b.resetFolder, b.backendUrl, b.backendToken, b.autoSync, b.serverName, b.udn, b.regenerate, b.deviceNickname)) v.isEnabled = !locked
         showUdnHistory()
         showServerIdentity()
     }
@@ -128,7 +129,9 @@ class SettingsActivity : AppCompatActivity() {
     private fun save(): Boolean {
         prefs.backendUrl = b.backendUrl.text?.toString() ?: ""
         prefs.backendToken = b.backendToken.text?.toString() ?: ""
+        prefs.autoSync = b.autoSync.isChecked
         prefs.deviceNickname = b.deviceNickname.text?.toString() ?: ""
+        AutoSync.schedule(this)
         val error = prefs.saveIdentity(b.udn.text?.toString(), b.serverName.text?.toString())
         if (error != null) { b.udn.error = error; return false }
         b.udn.error = null

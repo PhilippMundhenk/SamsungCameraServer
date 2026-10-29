@@ -52,12 +52,15 @@ Espresso suite with its gate on an emulator (API 34), multi-arch image build.
 
 ## Status / known gaps
 
-* Not yet tested against a real camera — the simulator is built from the firmware strings and
-  pc-autobackup packet notes ([issue #6](https://github.com/PhilippMundhenk/SamsungCameraServer/issues/6)).
-  First real run: watch the app log or the server status page; everything the camera does is logged.
+* Tested against a real NX1000 (home server on the LAN, app on the phone's hotspot). The
+  simulator mirrors what the camera was seen doing, including the Browse of a remembered
+  object before the first upload of a session; the open camera questions are in
+  [issue #6](https://github.com/PhilippMundhenk/SamsungCameraServer/issues/6). Every request the
+  camera makes is logged, so a new camera model can be checked from the app log or the server
+  status page alone.
 * "File exists" UPnP error code for `CreateObject` is unknown; the server accepts and discards
   duplicates instead (`BackupServer.fileExistsErrorCode`).
 * Resumable uploads (`dlna:resumeUpload`) are announced as unsupported; the camera restarts a file
-  after a dropped connection.
+  after a dropped connection. A fragment is never kept (the sinks reject short uploads).
 * RAW conversion and EXIF stages run only where the tools are installed (the Docker image has
   exiftool, RawTherapee and dcraw_emu); the tests cover every stage with fake tools.

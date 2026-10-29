@@ -63,6 +63,11 @@ class Prefs(context: Context) {
         }
         set(v) = sp.edit().putString("udn", v).apply()
 
+    /** Keep uploading to the home server on its own until nothing is left (phone + server mode). */
+    var autoSync: Boolean
+        get() = sp.getBoolean("autoSync", true)
+        set(v) = sp.edit().putBoolean("autoSync", v).apply()
+
     /** The first-start wizard has been completed (or skipped). */
     var setupDone: Boolean
         get() = sp.getBoolean("setupDone", false)

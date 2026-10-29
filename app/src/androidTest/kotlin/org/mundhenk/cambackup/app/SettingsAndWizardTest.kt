@@ -99,6 +99,7 @@ class SettingsAndWizardTest {
             onView(withId(R.id.modePhoneAndServer)).perform(scrollTo(), tap())
             onView(withId(R.id.backendUrl)).perform(scrollTo(), replaceText("http://nas.lan:52235/"), closeSoftKeyboard())
             onView(withId(R.id.backendToken)).perform(scrollTo(), replaceText(" secret "), closeSoftKeyboard())
+            onView(withId(R.id.autoSync)).perform(scrollTo(), tap())                 // off
 
             // invalid UDN blocks the export and shows an error
             onView(withId(R.id.udn)).perform(scrollTo(), replaceText("not-a-udn"), closeSoftKeyboard())
@@ -150,6 +151,7 @@ class SettingsAndWizardTest {
         }
         // leaving the screen saved url/token/name
         assertEquals(Mode.PHONE_AND_SERVER, prefs.mode)
+        org.junit.Assert.assertFalse(prefs.autoSync)
         assertEquals("http://nas.lan:52235", prefs.backendUrl)
         assertEquals("secret", prefs.backendToken)
         assertEquals("[PC]Phone", prefs.serverName)

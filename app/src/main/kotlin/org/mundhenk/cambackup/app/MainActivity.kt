@@ -24,7 +24,7 @@ import org.mundhenk.cambackup.app.databinding.ItemTransferBinding
 class MainActivity : AppCompatActivity() {
     private lateinit var b: ActivityMainBinding
     private lateinit var prefs: Prefs
-    private val adapter = TransferAdapter()
+    private val adapter = TransferAdapter({ t -> Ui.openTransfer(this, prefs, t) }, { Sinks.direct(this, prefs.folderUri) })
     // Every service state change produces a log line, so refreshing the status here keeps the
     // button/label in sync without polling.
     private val logListener: (String) -> Unit = { showStatus() }
@@ -35,6 +35,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
         Transfers.init(this)
+        AutoSync.schedule(this)
         b = ActivityMainBinding.inflate(layoutInflater)
         setContentView(b.root)
         Ui.edgeToEdge(this, b.root, b.toolbar)
@@ -52,6 +53,7 @@ class MainActivity : AppCompatActivity() {
         }
         b.syncNow.setOnClickListener {
             if (!Uploader.syncInBackground(this) { runOnUiThread { showStatus() } }) LogBus.log(getString(R.string.sync_already_running))
+            AutoSync.schedule(this)
             showStatus()
         }
         b.openSettings.setOnClickListener { startActivity(Intent(this, SettingsActivity::class.java)) }
@@ -72,7 +74,7 @@ class MainActivity : AppCompatActivity() {
     override fun onOptionsItemSelected(item: MenuItem): Boolean = when (item.itemId) {
         R.id.action_settings -> { startActivity(Intent(this, SettingsActivity::class.java)); true }
         R.id.action_log -> { startActivity(Intent(this, LogActivity::class.java)); true }
-        R.id.action_clear_transfers -> { Transfers.clear(); true }
+        R.id.action_clear_transfers -> { Transfers.clear(); Thumbnails.clear(); true }
         else -> super.onOptionsItemSelected(item)
     }
 
@@ -101,6 +103,7 @@ class MainActivity : AppCompatActivity() {
         b.syncNow.isEnabled = !Uploader.running
         b.syncNow.text = when {
             Uploader.running -> getString(R.string.sync_running)
+            pending > 0 && prefs.autoSync -> getString(R.string.sync_auto_pending, pending)
             pending > 0 -> getString(R.string.sync_now_pending, pending)
             else -> getString(R.string.sync_now)
         }
@@ -114,7 +117,7 @@ class MainActivity : AppCompatActivity() {
         showStatus()
     }
 
-    class TransferAdapter : ListAdapter<Transfer, TransferAdapter.Holder>(Diff) {
+    class TransferAdapter(private val onOpen: (Transfer) -> Unit, private val sink: () -> LocalSink) : ListAdapter<Transfer, TransferAdapter.Holder>(Diff) {
         class Holder(val b: ItemTransferBinding) : RecyclerView.ViewHolder(b.root)
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
@@ -129,6 +132,8 @@ class MainActivity : AppCompatActivity() {
             holder.b.name.text = t.name
             holder.b.details.text = c.getString(R.string.transfer_details, t.date, Ui.formatSize(t.size), Ui.formatTime(t.at))
             holder.b.location.text = c.getString(if (onServer) R.string.state_on_server else R.string.state_on_phone) + " · " + t.location
+            Thumbnails.show(holder.b.thumb, t) { runCatching { sink().open(t.date, t.name) }.getOrNull() }
+            holder.b.root.setOnClickListener { onOpen(t) }
         }
 
         object Diff : DiffUtil.ItemCallback<Transfer>() {
