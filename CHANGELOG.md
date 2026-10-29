@@ -24,6 +24,8 @@ All notable changes to this project are documented here. The format follows
   as such ("use http:// instead of https://"), the app warns under the URL field while typing,
   adds `http://` when no scheme was typed and names the reason when the server's identity
   cannot be read ("the server does not speak TLS ...", "HTTP 404").
+- Android: "Use the server's identity" offers the server's users; the phone then files its
+  uploads under the chosen user (`X-NX-User`).
 - Multi-user server (#20): `users=alice,bob` (or the settings page) gives each user their own
   identity, port, folder, ledger, pairing file and settings overrides (`user.<name>.<key>`);
   exports default to `<export.dir>/<user>`; the status page shows per-user totals; the phone

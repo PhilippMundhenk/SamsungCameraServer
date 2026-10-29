@@ -110,7 +110,7 @@ class BackupService : Service() {
             }
             Mode.SERVER -> {
                 LogBus.log("Mode: server → ${prefs.backendUrl}" + if (prefs.backendToken.isBlank()) " (no token)" else " (token set)")
-                RecordingSink(BackendSink(prefs.backendUrl, LogBus::log, prefs.backendToken, deviceName = prefs.deviceNickname), TransferState.ON_SERVER, { _, _ -> prefs.backendUrl })
+                RecordingSink(BackendSink(prefs.backendUrl, LogBus::log, prefs.backendToken, deviceName = prefs.deviceNickname, user = prefs.serverUser), TransferState.ON_SERVER, { _, _ -> prefs.backendUrl })
             }
         }
 

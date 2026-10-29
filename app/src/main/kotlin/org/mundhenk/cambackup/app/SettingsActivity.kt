@@ -85,7 +85,7 @@ class SettingsActivity : AppCompatActivity() {
             serverIdentity = id
             b.serverIdentityInfo.text = IdentityExchange.describe(this, prefs, id)
             val locked = BackupService.running
-            b.useServerIdentity.isEnabled = id != null && id.udn != prefs.udn && !locked
+            b.useServerIdentity.isEnabled = id != null && (id.udn != prefs.udn || prefs.serverUser.isNotBlank()) && !locked   // bound to a user: may switch back or to another user
             b.giveServerIdentity.isEnabled = id != null && id.udn != prefs.udn && !locked
         }
     }

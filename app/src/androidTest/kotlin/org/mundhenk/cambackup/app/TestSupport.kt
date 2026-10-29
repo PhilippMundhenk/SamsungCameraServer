@@ -99,6 +99,9 @@ object TestSupport {
         val files = LinkedHashMap<String, ByteArray>()
         val events = CopyOnWriteArrayList<String>()
         val deviceNames = CopyOnWriteArrayList<String>()
+        val userHeaders = CopyOnWriteArrayList<String>()
+        /** name -> identity of a multi-user server; empty = a plain server */
+        val users = LinkedHashMap<String, org.mundhenk.cambackup.core.ServerIdentity>()
         @Volatile var healthy = true
         @Volatile var identity = org.mundhenk.cambackup.core.ServerIdentity("4a682b0b-0361-dbae-6155-00000000beef", "[PC]FakeHome", org.mundhenk.cambackup.core.ServerIdentity.DEFAULT_MAC)
         @Volatile var serveIdentity = true
@@ -111,7 +114,13 @@ object TestSupport {
         private fun handle(req: HttpRequest): HttpResponse {
             if (req.path == "/health") return HttpResponse.empty(if (healthy) 200 else 503)
             req.header("x-nx-device")?.let { deviceNames += it }
-            if (req.path == "/api/v1/identity" && req.method == "GET") return if (serveIdentity) HttpResponse(200, identityJson().toByteArray(), "application/json") else HttpResponse.notFound()
+            req.header("x-nx-user")?.let { userHeaders += it }
+            if (req.path == "/api/v1/users" && req.method == "GET") return HttpResponse(200, users.entries.joinToString(",", "[", "]") { (n, id) ->
+                "{\"name\":\"$n\",\"udn\":\"${id.udn}\",\"friendlyName\":\"${id.friendlyName}\",\"port\":1}" }.toByteArray(), "application/json")
+            if (req.path == "/api/v1/identity" && req.method == "GET") {
+                req.query["user"]?.let { u -> val id = users[u] ?: return HttpResponse.notFound(); return HttpResponse(200, ("{\"udn\":\"" + id.udn + "\",\"name\":\"" + id.friendlyName + "\",\"mac\":\"" + id.macAddr + "\",\"user\":\"" + u + "\"}").toByteArray(), "application/json") }
+                return if (serveIdentity) HttpResponse(200, identityJson().toByteArray(), "application/json") else HttpResponse.notFound()
+            }
             if (token.isNotEmpty() && req.header("authorization") != "Bearer $token") return HttpResponse.empty(401)
             if (req.path == "/api/v1/identity" && req.method == "POST") {
                 val body = req.readBodyText()

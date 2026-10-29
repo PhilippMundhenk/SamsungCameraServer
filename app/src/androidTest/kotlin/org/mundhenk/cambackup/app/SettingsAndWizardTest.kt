@@ -163,6 +163,53 @@ class SettingsAndWizardTest {
     }
 
     /** Identity exchange with the home server, both directions, from Settings and from the wizard. */
+    /** #20: a multi-user server asks whose identity the phone should take; the choice sticks to the uploads. */
+    @Test
+    fun identityCanBeTakenFromAServerUser() {
+        val backend = TestSupport.FakeBackend("tok").start()
+        try {
+            val alice = org.mundhenk.cambackup.core.ServerIdentity("4a682b0b-0361-dbae-6155-00000000a11c", "[PC]Alice", org.mundhenk.cambackup.core.ServerIdentity.DEFAULT_MAC)
+            backend.users["alice"] = alice
+            backend.users["bob"] = org.mundhenk.cambackup.core.ServerIdentity("4a682b0b-0361-dbae-6155-00000000b0b0", "[PC]Bob", org.mundhenk.cambackup.core.ServerIdentity.DEFAULT_MAC)
+            val prefs = Prefs(context)
+            prefs.mode = Mode.PHONE_AND_SERVER; prefs.backendUrl = backend.url; prefs.backendToken = "tok"
+            ActivityScenario.launch(SettingsActivity::class.java).use {
+                waitForUi { onView(withId(R.id.serverIdentityInfo)).check(matches(withSubstring("uses a different UDN"))) }
+                onView(withId(R.id.useServerIdentity)).perform(scrollTo(), tap())
+                // the chooser (it appears once the users were fetched) lists the server itself and both users; cancel first
+                waitForUi { onView(withText("[PC]Alice (alice)")).inRoot(isDialog()).check(matches(isDisplayed())) }
+                onView(withText("[PC]Bob (bob)")).inRoot(isDialog()).check(matches(isDisplayed()))
+                onView(withText(R.string.cancel)).inRoot(isDialog()).perform(tap())
+                assertEquals("", prefs.serverUser)
+                onView(withId(R.id.useServerIdentity)).perform(scrollTo(), tap())
+                waitForUi { onView(withText("[PC]Alice (alice)")).inRoot(isDialog()).check(matches(isDisplayed())) }
+                onView(withText("[PC]Alice (alice)")).inRoot(isDialog()).perform(androidx.test.espresso.action.ViewActions.click())   // a list row: touch, not performClick
+                onView(withText(R.string.use_server_identity)).inRoot(isDialog()).perform(tap())
+                waitFor { prefs.udn == alice.udn }
+                assertEquals("alice", prefs.serverUser); assertEquals("[PC]Alice", prefs.serverName)
+                assertTrue(prefs.udnSource, prefs.udnSource.startsWith("from server [PC]Alice (alice)"))
+                waitForUi { onView(withId(R.id.serverIdentityInfo)).check(matches(withSubstring("Shared with the server [PC]Alice (alice)"))) }
+                assertTrue(LogBus.snapshot().any { it.contains("Identity taken over from server [PC]Alice (user alice)") })
+            }
+            // uploads and events now carry the user
+            File(Sinks.defaultFolder(context), "2026-10-29").mkdirs()
+            File(Sinks.defaultFolder(context), "2026-10-29/U.JPG").writeBytes(ByteArray(3))
+            Transfers.record("2026-10-29", "U.JPG", 3, TransferState.ON_PHONE, "x")
+            assertTrue(Uploader.sync(context).contains("1 uploaded"))
+            assertTrue(backend.userHeaders.toString(), backend.userHeaders.contains("alice"))
+            // back to the server itself through the same chooser
+            ActivityScenario.launch(SettingsActivity::class.java).use {
+                waitForUi { onView(withId(R.id.useServerIdentity)).check(matches(isEnabled())).let {} }
+                onView(withId(R.id.useServerIdentity)).perform(scrollTo(), tap())
+                waitForUi { onView(withText(context.getString(R.string.general_server_identity, "[PC]FakeHome"))).inRoot(isDialog()).check(matches(isDisplayed())) }
+                onView(withText(context.getString(R.string.general_server_identity, "[PC]FakeHome"))).inRoot(isDialog()).perform(androidx.test.espresso.action.ViewActions.click())
+                onView(withText(R.string.use_server_identity)).inRoot(isDialog()).perform(tap())
+                waitFor { prefs.udn == backend.identity.udn }
+                assertEquals("", prefs.serverUser)
+            }
+        } finally { backend.stop() }
+    }
+
     @Test
     fun identityIsSharedWithTheServerInBothDirections() {
         val backend = TestSupport.FakeBackend("tok").start()

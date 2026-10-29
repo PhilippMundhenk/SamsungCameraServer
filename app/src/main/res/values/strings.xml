@@ -87,6 +87,8 @@
     <string name="udn_server_no_answer">no answer</string>
     <string name="udn_server_checking">Asking the server for its identity…</string>
     <string name="use_server_identity">Use the server\'s identity</string>
+    <string name="choose_server_identity_title">Whose identity should this phone use?</string>
+    <string name="general_server_identity">The server itself (%1$s)</string>
     <string name="give_server_identity">Give the server this identity</string>
     <string name="use_server_identity_title">Use the server\'s identity on this phone?</string>
     <string name="use_server_identity_message">This phone will advertise the server\'s UDN %1$s and name \"%2$s\". Cards paired with the server then also work with this phone. Cards paired with this phone\'s current UDN stop working until you export the pairing file again; the current UDN stays in the history.</string>

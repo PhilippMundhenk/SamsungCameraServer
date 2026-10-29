@@ -23,7 +23,11 @@ class BackendSink(
     private val connectTimeoutMs: Int = 5000,
     /** Nickname of this device, sent as X-NX-Device so the server can list who talks to it. */
     private val deviceName: String = "",
+    /** Multi-user server: the user this phone files its uploads under (X-NX-User); "" = the server itself. */
+    private val user: String = "",
 ) : BackupSink {
+    /** One user of a multi-user home server, from GET /api/v1/users. */
+    data class UserInfo(val name: String, val udn: String, val friendlyName: String)
     private val baseUrl = baseUrl.trim().trimEnd('/')
 
     /** Why the last identity/health call failed, for the UI; null after a success. */
@@ -40,11 +44,27 @@ class BackendSink(
     private fun HttpURLConnection.auth() {
         if (token.isNotBlank()) setRequestProperty("Authorization", "Bearer $token")
         if (deviceName.isNotBlank()) setRequestProperty("X-NX-Device", deviceName.replace(Regex("[\\r\\n]"), " ").take(80))
+        if (user.isNotBlank()) setRequestProperty("X-NX-User", user)
     }
 
+    /** The users of a multi-user server (empty when there are none or the server is older); null when unreachable. */
+    fun fetchUsers(): List<UserInfo>? = try {
+        val c = URL("$baseUrl/api/v1/users").openConnection() as HttpURLConnection
+        c.requestMethod = "GET"; c.connectTimeout = connectTimeoutMs; c.readTimeout = 5000; c.auth()
+        val code = c.responseCode
+        val body = (if (code < 400) c.inputStream else c.errorStream)?.use { it.readBytes().toString(Charsets.UTF_8) } ?: ""
+        c.disconnect()
+        if (code != 200) emptyList()
+        else Regex("\\{[^}]*\\}").findAll(body).mapNotNull { m ->
+            val o = m.value
+            val name = jsonField(o, "name") ?: return@mapNotNull null
+            UserInfo(name, jsonField(o, "udn") ?: return@mapNotNull null, jsonField(o, "friendlyName") ?: name)
+        }.toList()
+    } catch (e: IOException) { lastError = reason(e); log("backend users failed: $lastError"); null }
+
     /** The server's identity from GET /api/v1/identity, so a phone can advertise the same UDN. Null when unreachable. */
-    fun fetchIdentity(): ServerIdentity? = try {
-        val c = URL("$baseUrl/api/v1/identity").openConnection() as HttpURLConnection
+    fun fetchIdentity(forUser: String? = null): ServerIdentity? = try {
+        val c = URL("$baseUrl/api/v1/identity" + (forUser?.takeIf { it.isNotBlank() }?.let { "?user=" + URLEncoder.encode(it, "UTF-8") } ?: "")).openConnection() as HttpURLConnection
         c.requestMethod = "GET"; c.connectTimeout = connectTimeoutMs; c.readTimeout = 5000; c.auth()
         val code = c.responseCode
         val body = (if (code < 400) c.inputStream else c.errorStream)?.use { it.readBytes().toString(Charsets.UTF_8) } ?: ""

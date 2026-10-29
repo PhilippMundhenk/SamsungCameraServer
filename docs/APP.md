@@ -40,6 +40,11 @@ current one, so the app asks for confirmation and explains that first. Every rep
 kept under *Previous UDNs* in Settings; tap one to switch back to it (again with a warning),
 which makes the cards that still carry it work again.
 
+**Several users on the home server.** If the server has users (see the server guide), *Use
+the server's identity* first asks whose identity the phone should take: the server itself or
+one of the users. With a user chosen, the phone advertises that user's identity to the camera
+and files its uploads under that user on the server.
+
 ## Daily use
 
 1. **Start server** on the main screen. A notification shows while it runs (needed to keep

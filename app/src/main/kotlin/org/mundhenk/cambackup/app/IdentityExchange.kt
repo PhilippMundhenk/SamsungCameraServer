@@ -13,7 +13,7 @@ import org.mundhenk.cambackup.core.ServerIdentity
  * background thread; callbacks arrive on the UI thread.
  */
 object IdentityExchange {
-    private fun backend(prefs: Prefs) = BackendSink(prefs.backendUrl, LogBus::log, prefs.backendToken, deviceName = prefs.deviceNickname)
+    private fun backend(prefs: Prefs) = BackendSink(prefs.backendUrl, LogBus::log, prefs.backendToken, deviceName = prefs.deviceNickname, user = prefs.serverUser)
 
     /** Why the last [fetch] failed ("HTTP 404", "the server does not speak TLS ..."), for [describe]. */
     @Volatile var lastError: String? = null
@@ -24,7 +24,7 @@ object IdentityExchange {
         if (prefs.backendUrl.isBlank()) { lastError = null; onResult(null); return }
         Thread({
             val b = backend(prefs)
-            val id = b.fetchIdentity()
+            val id = b.fetchIdentity(prefs.serverUser)           // the user this phone belongs to, or the server itself
             lastError = b.lastError
             activity.runOnUiThread { if (!activity.isFinishing) onResult(id) }
         }, "cambackup-identity").start()
@@ -33,18 +33,50 @@ object IdentityExchange {
     /** One-line verdict for the UI: shared, different, or unknown (with the reason). */
     fun describe(activity: Activity, prefs: Prefs, server: ServerIdentity?): String = when {
         server == null -> activity.getString(R.string.udn_server_unknown, prefs.backendUrl, lastError ?: activity.getString(R.string.udn_server_no_answer))
-        server.udn == prefs.udn -> activity.getString(R.string.udn_shared_with_server, server.friendlyName)
+        server.udn == prefs.udn -> activity.getString(R.string.udn_shared_with_server, server.friendlyName + (prefs.serverUser.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: ""))
         else -> activity.getString(R.string.udn_differs_from_server, server.friendlyName, server.udn)
     }
 
     fun sourceLabel(activity: Activity, prefs: Prefs): String =
         activity.getString(R.string.udn_source, prefs.udnSource.ifBlank { Prefs.SOURCE_GENERATED })
 
-    /** Phone takes the server's identity. [confirm] = ask first (Settings); the wizard asks nothing on first setup. */
+    /**
+     * Phone takes the server's identity. A multi-user server first asks whose: the server itself
+     * or one of its users (the phone then files its uploads under that user). [confirm] = ask
+     * before switching (Settings); the wizard asks nothing on first setup.
+     */
     fun adoptFromServer(activity: Activity, prefs: Prefs, server: ServerIdentity, confirm: Boolean, done: () -> Unit) {
+        Thread({
+            val b = backend(prefs)
+            val users = b.fetchUsers() ?: emptyList()
+            // [server] may be the identity of the user this phone is bound to; the first choice is the server itself
+            val general = if (users.isEmpty()) server else (b.fetchIdentity() ?: server)
+            activity.runOnUiThread {
+                if (activity.isFinishing) return@runOnUiThread
+                if (users.isEmpty()) adoptChosen(activity, prefs, server, "", confirm, done)
+                else {
+                    val labels = arrayOf(activity.getString(R.string.general_server_identity, general.friendlyName)) + users.map { "${it.friendlyName} (${it.name})" }
+                    MaterialAlertDialogBuilder(activity)
+                        .setTitle(R.string.choose_server_identity_title)
+                        .setItems(labels) { _, which ->
+                            if (which == 0) adoptChosen(activity, prefs, general, "", confirm, done)
+                            else {
+                                val u = users[which - 1]
+                                adoptChosen(activity, prefs, ServerIdentity(u.udn, u.friendlyName, server.macAddr), u.name, confirm, done)
+                            }
+                        }
+                        .setNegativeButton(R.string.cancel, null)
+                        .show()
+                }
+            }
+        }, "cambackup-users").start()
+    }
+
+    private fun adoptChosen(activity: Activity, prefs: Prefs, server: ServerIdentity, user: String, confirm: Boolean, done: () -> Unit) {
         val apply = {
-            prefs.adoptIdentity(server, activity.getString(R.string.udn_source_server, server.friendlyName, prefs.backendUrl))
-            LogBus.log("Identity taken over from server ${server.friendlyName} (${prefs.backendUrl}): uuid:${server.udn}")
+            prefs.serverUser = user
+            prefs.adoptIdentity(server, activity.getString(R.string.udn_source_server, server.friendlyName + (if (user.isNotEmpty()) " ($user)" else ""), prefs.backendUrl))
+            LogBus.log("Identity taken over from server ${server.friendlyName}${if (user.isNotEmpty()) " (user $user)" else ""} (${prefs.backendUrl}): uuid:${server.udn}")
             Toast.makeText(activity, R.string.identity_adopted, Toast.LENGTH_SHORT).show()
             done()
         }

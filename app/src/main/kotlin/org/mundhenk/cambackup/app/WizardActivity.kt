@@ -88,7 +88,7 @@ class WizardActivity : AppCompatActivity() {
         IdentityExchange.fetch(this, prefs) { id ->
             serverIdentity = id
             b.serverIdentityInfo.text = IdentityExchange.describe(this, prefs, id)
-            b.useServerIdentity.isEnabled = id != null && id.udn != prefs.udn
+            b.useServerIdentity.isEnabled = id != null && (id.udn != prefs.udn || prefs.serverUser.isNotBlank())
             b.giveServerIdentity.isEnabled = id != null && id.udn != prefs.udn
         }
     }

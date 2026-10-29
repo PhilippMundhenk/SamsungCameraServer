@@ -42,6 +42,11 @@ class Prefs(context: Context) {
         get() = sp.getString("folderLayout", "day") ?: "day"
         set(v) = sp.edit().putString("folderLayout", v.trim().ifBlank { "day" }).apply()
 
+    /** Multi-user home server: the user this phone belongs to ("" = the server itself). Set when its identity is taken. */
+    var serverUser: String
+        get() = sp.getString("serverUser", "") ?: ""
+        set(v) = sp.edit().putString("serverUser", v.trim()).apply()
+
     var backendUrl: String
         get() = sp.getString("backend", "") ?: ""
         set(v) {
