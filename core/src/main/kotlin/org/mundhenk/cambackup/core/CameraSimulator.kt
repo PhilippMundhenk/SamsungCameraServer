@@ -35,7 +35,12 @@ class CameraSimulator(
         val name = doc.getElementsByTagNameNS("*", "friendlyName").item(0).textContent
         log("Found server '$name' uuid:$udn")
 
-        soap("X_BACKUP_START", "<UDN>uuid:$udn</UDN><FileCnt>${files.size}</FileCnt><SysOff>${if (sysOff) 1 else 0}</SysOff>")
+        soap("X_BACKUP_START", "<UDN>uuid:$udn</UDN><NumOfContents>${files.size}</NumOfContents><SystemOff>${if (sysOff) 1 else 0}</SystemOff>")
+        // like the NX1000 on its second session: ask about the last object of the previous session (long gone)
+        val (gone, goneBody) = soapRaw("Browse", "<ObjectID>UP_2021-06-07_7606e6afaf</ObjectID><BrowseFlag>BrowseMetadata</BrowseFlag><Filter>*</Filter><StartingIndex>0</StartingIndex><RequestedCount>0</RequestedCount><SortCriteria></SortCriteria>")
+        check(gone == 500 && goneBody.contains("<errorCode>701</errorCode>")) { "Browse of a stale object must be UPnP error 701, got HTTP $gone: $goneBody" }
+        val browsed = soap("Browse", "<ObjectID>0</ObjectID><BrowseFlag>BrowseDirectChildren</BrowseFlag><Filter>*</Filter><StartingIndex>0</StartingIndex><RequestedCount>0</RequestedCount><SortCriteria></SortCriteria>")
+        check(browsed.contains("&lt;container ")) { "Browse of the root returned no container: $browsed" }
         val uploaded = ArrayList<String>()
         for (f in files) {
             val didl = """<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:dlna="urn:schemas-dlna-org:metadata-1-0/"><item id="" restricted="0" parentID="DLNA.ORG_AnyContainer"><dc:title>${UpnpXml.escape(f.name)}</dc:title><dc:date>${f.date}</dc:date><upnp:class>${f.upnpClass}</upnp:class><res protocolInfo="*:*:${f.mime}:${BackupServer.dlnaProfileFor(f.mime)};DLNA.ORG_CI=0" size="${f.bytes.size}"></res></item></DIDL-Lite>"""
@@ -57,7 +62,7 @@ class CameraSimulator(
             conn.inputStream.use { it.readBytes() }
             if (rc == 200) uploaded += f.name else log("Upload of ${f.name} failed: HTTP $rc")
         }
-        soap("X_BACKUP_DONE", "<UDN>uuid:$udn</UDN><SysOff>${if (sysOff) 1 else 0}</SysOff>")
+        soap("X_BACKUP_DONE", "<UDN>uuid:$udn</UDN><SystemOff>${if (sysOff) 1 else 0}</SystemOff>")
         return Result(udn, name, uploaded)
     }
 

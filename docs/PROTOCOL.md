@@ -33,12 +33,37 @@ Consequence: a file delivered to the phone is never offered to the home server a
 why the app has the "phone + home server" mode (upload later) and why both targets dedup by
 date + name + size on their own.
 
+### Per file: the `BackupID` and the GetObject step (firmware 1.15)
+
+`ObjectTable` also has a `BackupID` column. The firmware's per-file state machine
+(`E_NAPI_PCBACKUP_SEND_ONE` → `SEND_ONE_GET_OBJECT` → `SEND_ONE_FILE_UPLOAD`) works like this:
+
+1. A file with `IsBackup = 1` is skipped ("Already Uploaded File").
+2. A file **without** a `BackupID` gets `CreateObject` (ContainerID `DLNA.ORG_AnyContainer`);
+   the ObjectID the server answers with is stored as the file's `BackupID`.
+3. A file **with** a `BackupID` (a CreateObject happened but the upload never finished, e.g. the
+   session hit the 1,000-file cap right after the CreateObject) first gets
+   `Browse(ObjectID = BackupID, BrowseMetadata)` — the firmware's "GetObject". Two answers work:
+   * the item, with `importUri`, `dlna:uploadedSize` and `dlna:resumeUpload`: the camera
+     continues the upload from `uploadedSize` ("SendReady Upload path[…] Startoffset[…]");
+   * UPnP error **701 No such object**: the camera does a fresh `CreateObject`
+     ("No Such Exist → CreateObject Retry").
+   An HTTP 200 with an empty `Result` is neither and the camera waits forever on its transfer
+   screen (seen on the NX1000; fixed in 0.2.0).
+4. After a successful upload `IsBackup` is set.
+
+Consequence for several targets: **no synchronisation between the phone and the home server is
+needed.** The only state that crosses sessions is per file on the card (`IsBackup`,
+`BackupID`); a target that does not know a `BackupID` answers 701 and the camera simply
+re-creates the object there. One file is at most re-sent once (the one that was in flight when
+the previous session ended), and both targets discard duplicates by date + name + size.
+
 ## Session size: 1,000 files, newest first
 
 The manual (NX1100, p. 118) states "You can send up to 1,000 files" per Auto Backup run. The
 firmware builds the list with `select FullPath from ObjectTable where class != 0 and IsBackup
 != 1 order by FullPath DESC`, so a session takes the **newest** files first and announces the
-count in `X_BACKUP_START` (`FileCnt`). Every uploaded file is marked `IsBackup = 1`, so running
+count in `X_BACKUP_START` (`NumOfContents`). Every uploaded file is marked `IsBackup = 1`, so running
 Auto Backup again continues with the remaining, older files; nothing is lost, it just takes
 several runs for a card with more than a thousand new files.
 
@@ -49,18 +74,25 @@ The camera is always the client:
 ```
 SSDP M-SEARCH (ST MediaServer:1)      → we answer with LOCATION + USN uuid:<UDN>
 GET  /DMS/SamsungDmsDesc.xml          → UPnP device description, <UDN> must match
-POST ContentDirectory  X_BACKUP_START {UDN, FileCnt, SysOff}
+POST ContentDirectory  X_BACKUP_START {UDN, NumOfContents, SystemOff}
+POST ContentDirectory  Browse         BrowseMetadata of the last object of the previous session
+                                        ← UPnP error 701 (gone), or the item if it still waits for its upload
 per file:
   POST ContentDirectory  CreateObject   DIDL with dc:title, dc:date, upnp:class, res@size
                                         ← DIDL with res@importUri
   POST <importUri>                      raw bytes, Content-Length = size  ← 200
-POST ContentDirectory  X_BACKUP_DONE  {UDN, SysOff}
+POST ContentDirectory  X_BACKUP_DONE  {UDN, SystemOff}
 ```
 
-* `SysOff` is the camera's "shut down the PC after the backup" option; the home server can run
+* `SystemOff` is the camera's "shut down the PC after the backup" option; the home server can run
   a command on it (`sysoff.command`).
-* The camera also issues `Browse`, `GetProtocolInfo`, `GetTransferProgress`, `DestroyObject`,
-  `StopTransferResource`; all are answered generically.
+* `Browse`: on its second session the NX1000 first asks about the last object id of the previous
+  one (`UP_2021-06-07_7606e6afaf`, the oldest file the 1,000-file cap had let through) and does
+  not continue on an empty result. The server keeps a tiny tree: root `0` with one folder `UP`
+  ("Auto Backup"), every `parentID` handed out in CreateObject (`UP_<date>`) is that folder, an
+  object still waiting for its upload is returned as the item it was created as, anything else
+  is UPnP error 701 "No such object". `GetProtocolInfo`, `GetTransferProgress`, `DestroyObject`,
+  `StopTransferResource` are answered generically.
 * Duplicates: the server accepts and discards them (the exact UPnP error code the firmware
   treats as "file exists" is unknown; see [issue #6](https://github.com/PhilippMundhenk/SamsungCameraServer/issues/6)).
 * Resumable uploads exist in the firmware (`dlna:resumeUpload`) but are announced as

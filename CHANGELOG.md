@@ -18,10 +18,18 @@ All notable changes to this project are documented here. The format follows
 - Server: `tools.path` to find exiftool / RAW converters outside `PATH`.
 - Android: a **Hotspot** button next to *Start server* opens the phone's hotspot settings
   (Android lets no app switch the hotspot on directly).
+- Android: the version name carries the git hash (`0.2.0-abc1234`), shown at the end of
+  Settings and as the first log line when the server starts.
 - Useful errors for the https:// mistake: the server logs a TLS handshake on its plain port
   as such ("use http:// instead of https://"), the app warns under the URL field while typing,
   adds `http://` when no scheme was typed and names the reason when the server's identity
   cannot be read ("the server does not speak TLS ...", "HTTP 404").
+- Fixed: the second Auto Backup session stalled on both targets. After X_BACKUP_START the
+  NX1000 browses the last object of its previous session; the server answered with an empty
+  result and the camera waited forever. Browse now serves a small content tree (root with an
+  "Auto Backup" folder, the parentIDs handed out in CreateObject, objects still waiting for
+  their upload) and UPnP error 701 for anything else, which lets the camera continue. The
+  session start recognises the camera's `NumOfContents`. (#23)
 - Every protocol request is logged (service descriptions, SUBSCRIBE, Browse and the other
   ContentDirectory/ConnectionManager actions, connections closed without a request), so a
   camera that stops after the session start shows what it did next.

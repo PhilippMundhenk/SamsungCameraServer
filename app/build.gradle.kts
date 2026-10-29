@@ -4,6 +4,11 @@ plugins {
     jacoco
 }
 
+// Short git hash of the working tree ("unknown" outside a checkout), appended to the version name.
+val gitSha: String = runCatching {
+    providers.exec { commandLine("git", "rev-parse", "--short=7", "HEAD") }.standardOutput.asText.get().trim()
+}.getOrDefault("").ifEmpty { "unknown" }
+
 android {
     namespace = "org.mundhenk.cambackup.app"
     compileSdk = 35
@@ -13,7 +18,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 2
-        versionName = "0.2.0"
+        versionName = "0.2.0-$gitSha"    // the hash tells installed builds apart (Settings footer, first log line)
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -50,6 +55,7 @@ android {
         jvmTarget = "17"
     }
     buildFeatures {
+        buildConfig = true
         viewBinding = true
     }
     packaging {

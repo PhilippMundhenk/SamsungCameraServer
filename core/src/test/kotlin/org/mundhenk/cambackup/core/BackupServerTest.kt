@@ -91,9 +91,26 @@ class BackupServerTest {
         assertTrue(soap("GetSearchCapabilities", "").second.contains("<SearchCaps></SearchCaps>"))
         assertTrue(soap("GetSortCapabilities", "").second.contains("<SortCaps></SortCaps>"))
         assertTrue(soap("GetSystemUpdateID", "").second.contains("<Id>1</Id>"))
-        assertTrue(soap("Browse", "<ObjectID>0</ObjectID>").second.contains("<TotalMatches>0</TotalMatches>"))
-        assertTrue(log.toString(), log.any { it == "CDS Browse from 127.0.0.1 (ObjectID 0)" } && log.any { it == "CDS GetSystemUpdateID from 127.0.0.1" })
-        assertTrue(log.none { it.startsWith("CreateObject for") })
+        // Browse: root lists the upload folder; metadata of root / folder / any parentID we handed out; stale ids -> 701
+        val rootChildren = soap("Browse", "<ObjectID>0</ObjectID><BrowseFlag>BrowseDirectChildren</BrowseFlag>").second
+        assertTrue(rootChildren, rootChildren.contains("<NumberReturned>1</NumberReturned><TotalMatches>1</TotalMatches>") && rootChildren.contains("&lt;container id=&quot;UP&quot; parentID=&quot;0&quot;"))
+        assertTrue(rootChildren.contains("Auto Backup") && rootChildren.contains("object.container.storageFolder") && rootChildren.contains("createClass"))
+        val rootMeta = soap("Browse", "<ObjectID>0</ObjectID><BrowseFlag>BrowseMetadata</BrowseFlag>").second
+        assertTrue(rootMeta, rootMeta.contains("&lt;container id=&quot;0&quot; parentID=&quot;-1&quot;") && rootMeta.contains("[PC]Unit"))
+        val folderMeta = soap("Browse", "<ObjectID>UP_2026-10-27</ObjectID><BrowseFlag>BrowseMetadata</BrowseFlag>").second
+        assertTrue(folderMeta, folderMeta.contains("&lt;container id=&quot;UP_2026-10-27&quot;") && folderMeta.contains("<TotalMatches>1</TotalMatches>"))
+        assertTrue(soap("Browse", "<ObjectID>UP</ObjectID><BrowseFlag>BrowseDirectChildren</BrowseFlag>").second.contains("<TotalMatches>0</TotalMatches>"))
+        val (staleCode, stale) = soap("Browse", "<ObjectID>UP_2021-06-07_7606e6afaf</ObjectID><BrowseFlag>BrowseMetadata</BrowseFlag>")
+        assertEquals(500, staleCode); assertTrue(stale.contains("<errorCode>701</errorCode>"))
+        assertTrue(log.toString(), log.any { it == "CDS Browse from 127.0.0.1 (ObjectID 0, BrowseDirectChildren) -> root" } && log.any { it == "CDS GetSystemUpdateID from 127.0.0.1" })
+        assertTrue(log.any { it == "CDS Browse from 127.0.0.1 (ObjectID UP_2021-06-07_7606e6afaf, BrowseMetadata) -> unknown object, UPnP error 701" })
+        // an object that still waits for its upload is browsable as the item it was created as
+        val created = soap("CreateObject", "<ContainerID>DLNA.ORG_AnyContainer</ContainerID><Elements>" + UpnpXml.escape(
+            """<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/"><item id="" parentID="DLNA.ORG_AnyContainer" restricted="0"><dc:title>B.JPG</dc:title><dc:date>2026-10-28</dc:date><upnp:class>object.item.imageItem</upnp:class><res protocolInfo="http-get:*:image/jpeg:*" size="7"></res></item></DIDL-Lite>""") + "</Elements>").second
+        val objectId = Regex("<ObjectID>([^<]+)</ObjectID>").find(created)!!.groupValues[1]
+        val pendingMeta = soap("Browse", "<ObjectID>$objectId</ObjectID><BrowseFlag>BrowseMetadata</BrowseFlag>").second
+        assertTrue(pendingMeta, pendingMeta.contains("&lt;item id=&quot;$objectId&quot; parentID=&quot;UP_2026-10-28&quot;") && pendingMeta.contains("importUri=") && pendingMeta.contains("<TotalMatches>1</TotalMatches>"))
+        assertTrue(log.any { it == "CDS Browse from 127.0.0.1 (ObjectID $objectId, BrowseMetadata) -> pending object" })
         val (code, fault) = soap("NoSuchAction", "")
         assertEquals(500, code); assertTrue(fault.contains("<errorCode>401</errorCode>"))
         assertTrue(log.any { it.contains("Unknown CDS action 'NoSuchAction'") })
@@ -131,7 +148,7 @@ class BackupServerTest {
     /** The camera's announced file count is the first thing to look at when it sends nothing. */
     @Test
     fun sessionStartLogsTheAnnouncedFileCount() {
-        soap("X_BACKUP_START", "<UDN>uuid:${identity.udn}</UDN><FileCnt>3</FileCnt><SysOff>0</SysOff>")
+        soap("X_BACKUP_START", "<UDN>uuid:${identity.udn}</UDN><NumOfContents>3</NumOfContents><SystemOff>0</SystemOff>")
         assertTrue(log.toString(), log.any { it == "Backup session started by 127.0.0.1: 3 file(s) announced" })
         soap("X_BACKUP_START", "<UDN>uuid:${identity.udn}</UDN><FileCnt> 0 </FileCnt><SysOff>0</SysOff>")
         assertTrue(log.toString(), log.any { it.startsWith("Backup session started by 127.0.0.1: 0 files announced, the camera has nothing new to send") })

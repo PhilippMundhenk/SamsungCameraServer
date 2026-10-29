@@ -145,6 +145,17 @@ object UpnpXml {
 </s:Envelope>"""
 
     /** DIDL-Lite returned from CreateObject: tells the camera where to POST the bytes. */
+    /** A container the camera may Browse: the root (id "0") or the upload folder it was given as parentID. */
+    fun containerDidl(id: String, parentId: String, title: String, childCount: Int): String = """<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" xmlns:dlna="urn:schemas-dlna-org:metadata-1-0/">
+  <container id="${escape(id)}" parentID="${escape(parentId)}" restricted="0" searchable="0" childCount="$childCount" dlna:dlnaManaged="00000001">
+    <dc:title>${escape(title)}</dc:title>
+    <upnp:class>object.container.storageFolder</upnp:class>
+    <upnp:storageUsed>-1</upnp:storageUsed>
+    <upnp:createClass includeDerived="1">object.item.imageItem</upnp:createClass>
+    <upnp:createClass includeDerived="1">object.item.videoItem</upnp:createClass>
+  </container>
+</DIDL-Lite>"""
+
     fun createObjectDidl(
         objectId: String, parentId: String, mimeType: String, dlnaProfile: String,
         size: Long, importUri: String, upnpClass: String,

@@ -47,6 +47,7 @@
     <string name="folder_reset">Use app storage</string>
     <string name="section_server">Home server</string>
     <string name="backend_url_hint">Server URL, e.g. http://nas.lan:52235</string>
+    <string name="version_label">Samsung Camera Backup %1$s</string>
     <string name="backend_https_hint">The home server speaks plain http:// on port 52235; https:// only works through a TLS reverse proxy.</string>
     <string name="backend_token_hint">Token (api.token on the server, optional)</string>
     <string name="section_identity">Identity (must match the pairing file)</string>

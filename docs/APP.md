@@ -57,6 +57,12 @@ which makes the cards that still carry it work again.
 Settings are locked while the server runs. "Clear list" in the overflow menu only clears the
 list, not the files.
 
+## Which build is installed?
+
+Settings ends with `Samsung Camera Backup 0.2.0-<git hash>`, and the same line is the first
+thing the log shows when the server starts. Compare the hash with the commit the APK was built
+from before chasing a bug that is already fixed.
+
 ## Notes
 
 * Phone and camera must be on the same network segment (SSDP multicast). The hotspot works on

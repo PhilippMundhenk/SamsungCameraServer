@@ -56,7 +56,7 @@ a file delivered to the phone will never be offered to the home server → sync-
 ```
 SSDP M-SEARCH (ST MediaServer:1)  → server replies with LOCATION + USN uuid:<UDN>
 GET  /DMS/SamsungDmsDesc.xml      → UPnP device description, <UDN> must match
-POST /upnp/control/ContentDirectory1  SOAPACTION X_BACKUP_START {UDN, FileCnt, SysOff}
+POST /upnp/control/ContentDirectory1  SOAPACTION X_BACKUP_START {UDN, NumOfContents, SystemOff}
 per file:
   POST …ContentDirectory1  CreateObject {ContainerID=DLNA.ORG_AnyContainer, Elements=DIDL}
        DIDL carries dc:title (SAM_0001.JPG), dc:date (YYYY-MM-DD), upnp:class,
@@ -240,14 +240,20 @@ rest in the next run because uploaded files are flagged `IsBackup` on the card.
 
 1. Does the camera show a one-time "connect to this PC?" prompt? (unknown, harmless)
 2. Exact UPnP error code the camera treats as "file exists".
-3. Does the camera call `Browse` before `X_BACKUP_START` and accept our empty result?
+3. ~~Does the camera call `Browse` before `X_BACKUP_START` and accept our empty result?~~
+   Answered (firmware 1.15 + NX1000 log): after `X_BACKUP_START` the camera browses the
+   `BackupID` of a file whose upload did not finish last time; it accepts the item or UPnP
+   error 701, never an empty result. See PROTOCOL.md, "Per file".
 4. Does the camera require the device description's `SERVER:` / `modelName` values, or is the
    UDN enough? (We mirror pc-autobackup's values to be safe.)
 5. Multiple saved Wi-Fi networks on the camera — confirm the remembered-network list.
 6. Hotspot: Android's hotspot interface must deliver multicast to the app — verify on the
    target phone (known to work for DLNA servers, but vendor ROMs differ).
-7. Behaviour after a dropped upload: camera retries the file, or marks it done? Decides whether
-   resume support is worth implementing.
+7. Behaviour after a dropped upload: the camera keeps the server's ObjectID as `BackupID` and
+   asks for it next time (Browse); given `dlna:uploadedSize` it resumes from that offset, given
+   701 it starts the file over. Resume support (issue #18) would mean keeping pending objects
+   across restarts and honouring the offset; today every pending object is forgotten on
+   restart, so the camera re-sends the file in full.
 Run the first session with the app log (or the server status page) visible; every camera
 request is logged. Checked against the NX1100 manual (p. 117 f.): the camera stores the PC
 information itself (our pairing file), backs up only new files, can shut the PC down afterwards

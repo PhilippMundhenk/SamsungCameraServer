@@ -32,6 +32,7 @@ class BackupService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) { stopSelf(); return START_NOT_STICKY }
         if (server != null) return START_STICKY
+        LogBus.log("Samsung Camera Backup ${BuildConfig.VERSION_NAME} starting the server")
         startForegroundCompat()
         acquireLocks()
         val prefs = Prefs(this)

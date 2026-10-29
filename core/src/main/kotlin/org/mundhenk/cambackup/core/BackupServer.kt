@@ -114,7 +114,7 @@ class BackupServer(
                 stats.sessions.incrementAndGet(); stats.lastCamera = req.remoteAddress
                 // FileCnt is what the camera intends to send: files not yet flagged as backed up on its
                 // card. 0 means the camera will sit on its transfer screen and send nothing.
-                val announced = Regex("<(?:\\w+:)?FileCnt[^>]*>\\s*(\\d+)\\s*</(?:\\w+:)?FileCnt>").find(bodyText)?.groupValues?.get(1)?.toIntOrNull()
+                val announced = Regex("<(?:\\w+:)?(?:NumOfContents|FileCnt)[^>]*>\\s*(\\d+)\\s*</(?:\\w+:)?(?:NumOfContents|FileCnt)>").find(bodyText)?.groupValues?.get(1)?.toIntOrNull()
                 log("Backup session started by ${req.remoteAddress}" + when (announced) {
                     null -> " (arguments: ${soapArguments(bodyText).take(300)})"
                     0 -> ": 0 files announced, the camera has nothing new to send (every file on the card is already flagged as backed up; a file sent to any target with this UDN is not offered again)"
@@ -124,13 +124,14 @@ class BackupServer(
                 HttpResponse.xml(UpnpXml.soapResponse(action, cds, ""))
             }
             "X_BACKUP_DONE" -> {
-                val sysOff = Regex("<SysOff>\\s*1\\s*</SysOff>").containsMatchIn(bodyText)
+                val sysOff = Regex("<(?:\\w+:)?(?:SysOff|SystemOff)[^>]*>\\s*1\\s*</(?:\\w+:)?(?:SysOff|SystemOff)>").containsMatchIn(bodyText)
                 log("Backup session finished by ${req.remoteAddress} (stored=${stats.filesStored.get()}, skipped=${stats.filesSkipped.get()})")
                 sink.onBackupDone(req.remoteAddress, sysOff)
                 HttpResponse.xml(UpnpXml.soapResponse(action, cds, ""))
             }
             "CreateObject" -> createObject(req, bodyText)
-            else -> { log("CDS $action from ${req.remoteAddress}${browseTarget(action, bodyText)}"); genericContentDirectory(action, bodyText, req) }
+            "Browse" -> browse(req, bodyText)
+            else -> { log("CDS $action from ${req.remoteAddress}"); genericContentDirectory(action, bodyText, req) }
         }
     }
 
@@ -139,8 +140,44 @@ class BackupServer(
         Regex("<(?:\\w+:)?X_BACKUP_START[^>]*>(.*?)</(?:\\w+:)?X_BACKUP_START>", RegexOption.DOT_MATCHES_ALL).find(soap)?.groupValues?.get(1)?.trim()
             ?: soap.replace(Regex("\\s+"), " ").trim()
 
-    private fun browseTarget(action: String, soap: String): String =
-        if (action == "Browse") Regex("<(?:\\w+:)?ObjectID[^>]*>(.*?)</(?:\\w+:)?ObjectID>").find(soap)?.groupValues?.get(1)?.let { " (ObjectID $it)" } ?: "" else ""
+    private fun soapArg(soap: String, name: String): String? =
+        Regex("<(?:\\w+:)?$name[^>]*>(.*?)</(?:\\w+:)?$name>", RegexOption.DOT_MATCHES_ALL).find(soap)?.groupValues?.get(1)?.trim()
+
+    /**
+     * Browse. The NX1000 asks about the last object of its previous session right after
+     * X_BACKUP_START (seen: `Browse UP_2021-06-07_7606e6afaf` after a session the 1,000-file cap
+     * had cut). An empty result left it waiting forever. Now: the root "0" holds one upload
+     * folder, the parentIDs we hand out ("UP_<date>") are that folder, an object still waiting
+     * for its upload is returned as the item it was created as, and anything else is UPnP error
+     * 701 "No such object", so the camera knows to create it anew.
+     */
+    private fun browse(req: HttpRequest, soap: String): HttpResponse {
+        val id = soapArg(soap, "ObjectID") ?: "0"
+        val flag = soapArg(soap, "BrowseFlag") ?: "BrowseDirectChildren"
+        val metadata = flag.equals("BrowseMetadata", ignoreCase = true)
+        val cds = UpnpXml.CDS_SERVICE_TYPE
+        fun result(didl: String, returned: Int, total: Int) = HttpResponse.xml(UpnpXml.soapResponse("Browse", cds,
+            "<Result>${UpnpXml.escape(didl)}</Result><NumberReturned>$returned</NumberReturned><TotalMatches>$total</TotalMatches><UpdateID>1</UpdateID>"))
+        val pendingFile = pending[id]
+        val kind = when {
+            id == "0" -> "root"
+            id == UPLOAD_CONTAINER || DATE_CONTAINER.matches(id) -> "folder"
+            pendingFile != null -> "pending object"
+            else -> "unknown object"
+        }
+        log("CDS Browse from ${req.remoteAddress} (ObjectID $id, $flag) -> $kind${if (kind == "unknown object") ", UPnP error 701" else ""}")
+        return when (kind) {
+            "root" -> if (metadata) result(UpnpXml.containerDidl("0", "-1", identity.friendlyName, 1), 1, 1)
+                      else result(UpnpXml.containerDidl(UPLOAD_CONTAINER, "0", UPLOAD_TITLE, 0), 1, 1)
+            "folder" -> if (metadata) result(UpnpXml.containerDidl(id, "0", UPLOAD_TITLE, 0), 1, 1) else result(EMPTY_DIDL, 0, 0)
+            "pending object" -> {
+                val f = pendingFile!!
+                val importUri = "http://${req.localAddress}:${boundPort}${UpnpXml.UPLOAD_PATH}?didx=0_id=$id"
+                result(UpnpXml.createObjectDidl(id, id.substringBeforeLast('_'), f.mimeType, dlnaProfileFor(f.mimeType), f.size, importUri, f.upnpClass), 1, 1)
+            }
+            else -> HttpResponse.xml(UpnpXml.soapFault(701, "No such object"), 500)
+        }
+    }
 
     private fun genericContentDirectory(action: String, bodyText: String, req: HttpRequest): HttpResponse {
         val cds = UpnpXml.CDS_SERVICE_TYPE
@@ -151,8 +188,6 @@ class BackupServer(
             "GetSearchCapabilities" -> HttpResponse.xml(UpnpXml.soapResponse(action, cds, "<SearchCaps></SearchCaps>"))
             "GetSortCapabilities" -> HttpResponse.xml(UpnpXml.soapResponse(action, cds, "<SortCaps></SortCaps>"))
             "GetSystemUpdateID" -> HttpResponse.xml(UpnpXml.soapResponse(action, cds, "<Id>1</Id>"))
-            "Browse" -> HttpResponse.xml(UpnpXml.soapResponse(action, cds,
-                "<Result>${UpnpXml.escape(EMPTY_DIDL)}</Result><NumberReturned>0</NumberReturned><TotalMatches>0</TotalMatches><UpdateID>1</UpdateID>"))
             else -> { log("Unknown CDS action '$action' from ${req.remoteAddress}"); HttpResponse.xml(UpnpXml.soapFault(401, "Invalid Action"), 500) }
         }
     }
@@ -251,6 +286,10 @@ class BackupServer(
     companion object {
         const val DEFAULT_HTTP_PORT = 52235
         private const val EMPTY_DIDL = "<DIDL-Lite xmlns=\"urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/\"></DIDL-Lite>"
+        /** The one folder a Browse of the root shows; CreateObject's parentIDs ("UP_<date>") resolve to it too. */
+        const val UPLOAD_CONTAINER = "UP"
+        const val UPLOAD_TITLE = "Auto Backup"
+        private val DATE_CONTAINER = Regex("UP_[0-9A-Za-z-]+")
 
         fun dlnaProfileFor(mime: String): String = when (mime.lowercase()) {
             "image/jpeg" -> "DLNA.ORG_PN=JPEG_LRG"
