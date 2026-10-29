@@ -110,7 +110,7 @@ class CamBackupServer private constructor(
             val devices = Devices(File(dataDir, "devices.tsv"))
             val sink = ServerSink(config.storageDir.apply { mkdirs() }, ledger, pipeline, log, { config.storageSubfolder }, devices)
             val backupRef = java.util.concurrent.atomic.AtomicReference<BackupServer>()
-            val api = Api(config, identity, sink, ledger, tools, { backupRef.get()?.stats }, log, devices)
+            val api = Api(config, identity, sink, ledger, tools, { backupRef.get()?.stats }, log, devices, Thumbnails(File(dataDir, "thumbs"), log))
             val backup = BackupServer(
                 identity, sink, httpPort = httpPortOverride ?: config.httpPort, log = log,
                 enableSsdp = config.ssdpEnabled, fallback = api,

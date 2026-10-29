@@ -59,6 +59,8 @@ class Config(val dataDir: File, private val props: Properties, private val env: 
     val uiEnabled get() = bool("ui.enabled", true)
     /** The settings page at /settings (protected by api.token when one is set). */
     val uiSettings get() = bool("ui.settings", true)
+    /** Thumbnails and file download links on the status page (the page is open to the LAN). */
+    val uiPreviews get() = bool("ui.previews", true)
 
     val exifTimeShift get() = stringOrNull("exif.timeshift")
     val exifTool get() = string("exif.tool", "exiftool")
@@ -172,6 +174,7 @@ class Config(val dataDir: File, private val props: Properties, private val env: 
             |ui.enabled=true
             |# Serve the settings page at /settings
             |ui.settings=true
+            |ui.previews=true
             |
             |# ---- post-processing pipeline (a stage is skipped when unset or when its tool is missing) ----
             |

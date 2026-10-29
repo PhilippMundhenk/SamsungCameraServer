@@ -51,6 +51,7 @@ object SettingsCatalog {
 
         SettingDef("ui.enabled", "Web UI", "Status page and pairing download", "", SettingDef.Type.BOOL, restart = true),
         SettingDef("ui.settings", "Web UI", "This settings page", "Switching it off here needs a config file edit to get it back.", SettingDef.Type.BOOL, restart = true),
+        SettingDef("ui.previews", "Web UI", "Previews on the status page", "Thumbnails next to the transferred files and a link to open each file. The status page is open to everyone on the network, so this shows more than file names do.", SettingDef.Type.BOOL),
     )
 
     val sections: List<String> = all.map { it.section }.distinct()
@@ -183,7 +184,7 @@ a{color:var(--accent)}.ok{color:var(--ok)}.bad{color:var(--bad)}
 .notice{background:var(--accent-soft);border-radius:8px;padding:10px 12px}.notice.warn{border-left:4px solid var(--bad)}.notice.bad{color:var(--bad)}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin:16px 0}
 .card .state{font-size:1.4em;font-weight:500}.card .hint{color:var(--muted);margin-top:4px}.card .dest{color:var(--muted);font-size:.9em;margin-top:12px}
-table.files td{padding:8px}table.files td.check{width:40px;font-size:1.15em}
+table.files td{padding:8px}table.files td.check{width:40px;font-size:1.15em}table.files td.thumb{width:64px;padding-right:4px}table.files td.thumb a{display:block;width:56px;height:56px;border-radius:6px;background:var(--card) center/28px no-repeat url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23999'><path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm4 18H6V4h7v5h5zm-10-5 1.4 1.4L11 14.8V19h2v-4.2l1.6 1.6 1.4-1.4L12 11z'/></svg>");overflow:hidden}table.files td.thumb img{width:56px;height:56px;object-fit:cover;display:block}table.files .name a{color:inherit;text-decoration:none}table.files .name a:hover{text-decoration:underline}
 form.rename{display:flex;gap:6px;align-items:center;margin-top:6px}form.rename input[type=text]{max-width:260px;padding:5px 8px}form.rename .btn{margin:0;padding:5px 10px}
 table.files .name{font-size:1.05em}
 table.settings td.k{width:34%}table.settings input[type=text],table.settings input[type=password],table.settings input[type=number],table.settings select{width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit;font-size:.95em}

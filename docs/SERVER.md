@@ -79,6 +79,7 @@ a short explanation, grouped into Camera, Storage, Pipeline, Hooks and Web UI. R
 | `api.token` | empty | bearer token the app must send (empty = anyone on the LAN can upload) |
 | `ui.enabled` | `true` | status page and pairing download |
 | `ui.settings` | `true` | the settings page at `/settings` |
+| `ui.previews` | `true` | thumbnails and open-file links on the status page (`/thumb/…`, `/file/…`); the page is open to the LAN |
 | `exif.timeshift` | off | shift all EXIF dates, exiftool syntax: `+1:00`, `-0:30`, `+0:0:1 0:0:0` |
 | `raw.convert` | `false` | render a JPEG next to every `.SRW` (`raw.converter` = auto / darktable / rawtherapee / dcraw / none; `raw.onlyifnojpeg`, `raw.quality`) |
 | `rename.pattern` | off | e.g. `{yyyy}{MM}{dd}_{HH}{mm}{ss}_{camera}_{base}.{ext}` (EXIF via exiftool, falls back to the camera date) |

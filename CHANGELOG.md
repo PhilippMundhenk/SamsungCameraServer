@@ -24,6 +24,9 @@ All notable changes to this project are documented here. The format follows
   as such ("use http:// instead of https://"), the app warns under the URL field while typing,
   adds `http://` when no scheme was typed and names the reason when the server's identity
   cannot be read ("the server does not speak TLS ...", "HTTP 404").
+- Server: thumbnails on the status page (JPEGs directly, RAW through the rendered JPEG next
+  to it), each file name opens the file; cached under `<data>/thumbs`; `ui.previews=false`
+  turns both off.
 - Android: the upload to the home server keeps going on its own (WorkManager: right away,
   with backoff while the server is unreachable, and every 15 minutes as a safety net, also
   with the app closed) until everything is on the server; *Upload automatically* in Settings

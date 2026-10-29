@@ -9,6 +9,7 @@ import org.mundhenk.cambackup.core.ServerIdentity
 import org.mundhenk.cambackup.core.ServerStats
 import org.mundhenk.cambackup.core.StoreResult
 import org.mundhenk.cambackup.core.UpnpXml
+import java.io.File
 import java.net.URLDecoder
 import java.security.MessageDigest
 import java.time.Duration
@@ -36,6 +37,7 @@ class Api(
     private val stats: () -> ServerStats?,
     private val log: (String) -> Unit,
     private val devices: Devices? = null,
+    private val thumbnails: Thumbnails? = null,
 ) : HttpHandler {
     private val startedAt = Instant.now()
 
@@ -53,6 +55,8 @@ class Api(
             path == "/api/v1/log" && req.method == "GET" -> text(ServerLog.snapshot().joinToString("\n"))
             path == "/health" -> text("ok")
             config.uiEnabled && path == "/" && req.method == "GET" -> html(StatusPage.render(this.statusModel(), req.query["scheme"]))
+            config.uiEnabled && config.uiPreviews && req.method == "GET" && path.startsWith("/thumb/") -> thumb(path.removePrefix("/thumb/"))
+            config.uiEnabled && config.uiPreviews && req.method == "GET" && path.startsWith("/file/") -> file(path.removePrefix("/file/"))
             config.uiEnabled && config.uiSettings && path == "/settings" && req.method == "GET" -> settingsAuthed(req) { html(SettingsPage.render(config, notice = req.query["saved"]?.let { "Saved. Settings marked restart take effect after a restart, everything else from the next file on." }, scheme = req.query["scheme"])) }
             config.uiEnabled && config.uiSettings && path == "/settings" && req.method == "POST" -> settingsAuthed(req) { saveSettings(req) }
             config.uiEnabled && config.uiSettings && path == "/settings/adopt-env" && req.method == "POST" -> settingsAuthed(req) { adoptEnvironment() }
@@ -124,6 +128,27 @@ class Api(
         return HttpResponse(303, ByteArray(0), "text/plain", mapOf("Location" to "/#devices"))
     }
 
+    /** /thumb/{date}/{name}: a cached small JPEG, 404 when there is no preview (RAW without a rendered JPEG, video). */
+    private fun thumb(rest: String): HttpResponse {
+        val entry = ledgerEntry(rest) ?: return HttpResponse.notFound()
+        val t = thumbnails?.thumbnail(entry) ?: return HttpResponse.notFound()
+        return HttpResponse(200, t.readBytes(), "image/jpeg", mapOf("Cache-Control" to "max-age=86400"))
+    }
+
+    /** /file/{date}/{name}: the received file itself, as the ledger knows it now (after rename/export). */
+    private fun file(rest: String): HttpResponse {
+        val entry = ledgerEntry(rest) ?: return HttpResponse.notFound()
+        val f = File(entry.path).takeIf { it.isFile } ?: return HttpResponse.notFound()
+        val mime = when (f.extension.lowercase()) { "jpg", "jpeg" -> "image/jpeg"; "mp4" -> "video/mp4"; "mov" -> "video/quicktime"; "srw" -> "image/x-samsung-srw"; else -> "application/octet-stream" }
+        return HttpResponse(200, f.readBytes(), mime, mapOf("Content-Disposition" to "inline; filename=\"${f.name}\""))
+    }
+
+    private fun ledgerEntry(rest: String): Ledger.Entry? {
+        val parts = rest.split('/').map { URLDecoder.decode(it, "UTF-8") }
+        if (parts.size != 2 || parts.any { it.isBlank() || it == "." || it == ".." }) return null
+        return ledger.find(parts[0], parts[1])
+    }
+
     private fun files(req: HttpRequest, rest: String): HttpResponse {
         val parts = rest.split('/').map { URLDecoder.decode(it, "UTF-8") }
         if (parts.size != 2 || parts.any { it.isBlank() || it == "." || it == ".." }) return HttpResponse(400, "expected /api/v1/files/{date}/{name}".toByteArray(), "text/plain")
@@ -190,6 +215,7 @@ class Api(
         val ledgerSize: Int, val recent: List<Ledger.Entry>, val sessions: Map<String, Session>,
         val config: List<Pair<String, String>>, val tools: Map<String, Boolean>, val log: List<String>, val dataDir: String,
         val devices: List<Devices.Device> = emptyList(),
+        val previews: Boolean = false,
     ) {
         /** A camera's given name, or its address when it has none. */
         fun deviceName(address: String): String = devices.firstOrNull { it.kind == Devices.Kind.CAMERA && it.id.equals(address, true) }?.displayName ?: address
@@ -198,7 +224,7 @@ class Api(
     fun statusModel() = StatusModel(
         identity, config.httpPort, Duration.between(startedAt, Instant.now()), stats(),
         ledger.size(), ledger.recent(30), sink.activeSessions(), config.summary(), tools.status(), ServerLog.snapshot().takeLast(60), config.dataDir.absolutePath,
-        devices?.all() ?: emptyList(),
+        devices?.all() ?: emptyList(), previews = config.uiPreviews && thumbnails != null,
     )
 
     private fun statusJson(): String {
@@ -241,6 +267,9 @@ class Api(
 /** Plain, dependency-free status page. */
 object StatusPage {
     private fun esc(s: String) = UpnpXml.escape(s)
+    private fun enc(s: String) = java.net.URLEncoder.encode(s, "UTF-8").replace("+", "%20")
+    private fun thumbUrl(e: Ledger.Entry) = "/thumb/${enc(e.date)}/${enc(e.name)}"
+    private fun fileUrl(e: Ledger.Entry) = "/file/${enc(e.date)}/${enc(e.name)}"
 
     fun render(m: Api.StatusModel, scheme: String? = null): String {
         val s = m.stats
@@ -271,7 +300,7 @@ object StatusPage {
         if (m.recent.isEmpty()) sb.append("<p class=\"help\">Nothing received yet. Camera: Wi-Fi &rarr; Auto Backup.<br>&#10003; on the phone &middot; &#10003;&#10003; on the home server</p>")
         else {
             sb.append("<table class=\"files\">")
-            for (e in m.recent) sb.append("<tr><td class=\"check\" title=\"on the server\">&#10003;&#10003;</td><td><div class=\"name\">${esc(e.name)}</div><div class=\"help\">${esc(e.date)} &middot; ${mb(e.size)} &middot; ${esc(java.time.Instant.ofEpochMilli(e.receivedAt).atZone(java.time.ZoneId.systemDefault()).toLocalDateTime().withNano(0).toString().replace('T', ' '))}</div><div class=\"help\">On the server &middot; <code>${esc(e.path)}</code></div></td></tr>")
+            for (e in m.recent) sb.append("<tr><td class=\"check\" title=\"on the server\">&#10003;&#10003;</td>${if (m.previews) "<td class=\"thumb\"><a href=\"${fileUrl(e)}\"><img src=\"${thumbUrl(e)}\" alt=\"\" loading=\"lazy\" onerror=\"this.remove()\"></a></td>" else ""}<td><div class=\"name\">${if (m.previews) "<a href=\"${fileUrl(e)}\">${esc(e.name)}</a>" else esc(e.name)}</div><div class=\"help\">${esc(e.date)} &middot; ${mb(e.size)} &middot; ${esc(java.time.Instant.ofEpochMilli(e.receivedAt).atZone(java.time.ZoneId.systemDefault()).toLocalDateTime().withNano(0).toString().replace('T', ' '))}</div><div class=\"help\">On the server &middot; <code>${esc(e.path)}</code></div></td></tr>")
             sb.append("</table>")
         }
         sb.append("<h2 id=\"devices\">Devices</h2>")

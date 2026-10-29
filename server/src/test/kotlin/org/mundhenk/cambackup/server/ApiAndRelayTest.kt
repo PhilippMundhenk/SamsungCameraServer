@@ -28,6 +28,58 @@ class ApiAndRelayTest {
     private fun start(env: Map<String, String> = emptyMap(), dir: File = dataDir, log: (String) -> Unit = { this.log += it }): CamBackupServer =
         CamBackupServer.start(dir, env = mapOf("CAMBACKUP_SSDP_ENABLED" to "false") + env, httpPortOverride = 0, log = log).also { servers += it }
 
+    /** Status page previews: a JPEG gets a cached thumbnail and a download link, a RAW only once the pipeline rendered one, everything else an icon. */
+    @Test
+    fun statusPagePreviews() {
+        val s = start(mapOf("CAMBACKUP_API_TOKEN" to "tok", "CAMBACKUP_EXIF_TOOL" to "no-exiftool-here"))
+        val base = "http://127.0.0.1:${s.port}"; val auth = mapOf("Authorization" to "Bearer tok")
+        val jpeg = ByteArrayOutputStream().also { out ->
+            val img = java.awt.image.BufferedImage(640, 480, java.awt.image.BufferedImage.TYPE_INT_RGB)
+            img.createGraphics().apply { color = java.awt.Color(200, 40, 40); fillRect(0, 0, 640, 480); dispose() }
+            javax.imageio.ImageIO.write(img, "jpg", out)
+        }.toByteArray()
+        assertEquals(201, http("PUT", "$base/api/v1/files/2026-10-29/SAM_0001.JPG", jpeg, auth).first)
+        assertEquals(201, http("PUT", "$base/api/v1/files/2026-10-29/SAM_0002.SRW", ByteArray(100), auth).first)
+        assertEquals(201, http("PUT", "$base/api/v1/files/2026-10-29/SAM_0003.MP4", ByteArray(100), auth).first)
+        s.pipeline.awaitIdle()
+        val page = http("GET", "$base/").second
+        assertTrue(page, page.contains("<img src=\"/thumb/2026-10-29/SAM_0001.JPG\"") && page.contains("<a href=\"/file/2026-10-29/SAM_0001.JPG\">SAM_0001.JPG</a>"))
+        // the thumbnail is small, a JPEG, and cached under the data dir
+        val c = java.net.URL("$base/thumb/2026-10-29/SAM_0001.JPG").openConnection() as java.net.HttpURLConnection
+        assertEquals(200, c.responseCode); assertEquals("image/jpeg", c.contentType)
+        val thumb = javax.imageio.ImageIO.read(c.inputStream)
+        assertTrue("${thumb.width}x${thumb.height}", thumb.width == 160 && thumb.height == 120)
+        assertTrue(File(dataDir, "thumbs/2026-10-29/SAM_0001.JPG.jpg").isFile)
+        assertEquals(200, http("GET", "$base/thumb/2026-10-29/SAM_0001.JPG").first)                  // second time from the cache
+        // RAW without a rendered JPEG, video, unknown, bad path -> 404
+        assertEquals(404, http("GET", "$base/thumb/2026-10-29/SAM_0002.SRW").first)
+        assertEquals(404, http("GET", "$base/thumb/2026-10-29/SAM_0003.MP4").first)
+        assertEquals(404, http("GET", "$base/thumb/2026-10-29/NOPE.JPG").first)
+        assertEquals(404, http("GET", "$base/thumb/2026-10-29").first)
+        assertEquals(404, http("GET", "$base/thumb/..%2F..%2Fx/SAM_0001.JPG").first)
+        // a RAW gets its preview once a JPEG sits next to it (what the RAW stage renders)
+        val raw = File(s.ledger.find("2026-10-29", "SAM_0002.SRW")!!.path)
+        File(raw.parentFile, raw.name + ".jpg").writeBytes(jpeg)
+        assertEquals(200, http("GET", "$base/thumb/2026-10-29/SAM_0002.SRW").first)
+        // a JPEG that is not one: no preview, no crash
+        assertEquals(201, http("PUT", "$base/api/v1/files/2026-10-29/BROKEN.JPG", "not a jpeg".toByteArray(), auth).first)
+        s.pipeline.awaitIdle()
+        assertEquals(404, http("GET", "$base/thumb/2026-10-29/BROKEN.JPG").first)
+        // the file itself, with its type; gone from disk -> 404
+        val fc = java.net.URL("$base/file/2026-10-29/SAM_0001.JPG").openConnection() as java.net.HttpURLConnection
+        assertEquals(200, fc.responseCode); assertEquals("image/jpeg", fc.contentType); assertArrayEquals(jpeg, fc.inputStream.readBytes())
+        assertEquals("video/mp4", (java.net.URL("$base/file/2026-10-29/SAM_0003.MP4").openConnection() as java.net.HttpURLConnection).contentType)
+        assertEquals("image/x-samsung-srw", (java.net.URL("$base/file/2026-10-29/SAM_0002.SRW").openConnection() as java.net.HttpURLConnection).contentType)
+        File(s.ledger.find("2026-10-29", "SAM_0003.MP4")!!.path).delete()
+        assertEquals(404, http("GET", "$base/file/2026-10-29/SAM_0003.MP4").first)
+        // switched off: no thumbnails, no links, 404 on the endpoints
+        s.config.save(mapOf("ui.previews" to "false"))
+        val plain = http("GET", "$base/").second
+        assertFalse(plain.contains("/thumb/")); assertTrue(plain.contains("<div class=\"name\">SAM_0001.JPG</div>"))
+        assertEquals(404, http("GET", "$base/thumb/2026-10-29/SAM_0001.JPG").first)
+        assertEquals(404, http("GET", "$base/file/2026-10-29/SAM_0001.JPG").first)
+    }
+
     @Test
     fun apiEdgeCases() {
         val s = start(mapOf("CAMBACKUP_API_TOKEN" to "tok"))
