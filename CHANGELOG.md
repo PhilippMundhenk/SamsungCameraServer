@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- The settings page could switch itself off (`ui.settings`, or the whole web UI with
+  `ui.enabled`), leaving no way back but editing the config file. Both are now read-only on
+  the page and change only in `cambackup.conf` or the environment.
+- The phone's deferred sync showed up as a camera named `phone`, with its own block of
+  per-camera settings. Only real camera addresses are recorded as cameras now; old entries
+  are dropped when the server starts.
+
 ## [0.2.0] - 2026-11-01
 
 ### Added

@@ -64,7 +64,10 @@ a short explanation, grouped into Camera, Storage, Pipeline, Hooks and Web UI. R
   effect after a restart; everything else applies to the next file or session.
 * With `api.token` set, the page asks for a password (any user name, the token). Without a
   token it is open to the LAN, like the status page, and says so. `ui.settings=false` removes
-  the page.
+  the page and `ui.enabled=false` the status page as well. Both are shown read-only on the
+  settings page and can only be changed in `cambackup.conf` or the environment, so the page
+  cannot lock itself out. To get a removed page back, set `ui.settings=true` in the file (or
+  `CAMBACKUP_UI_SETTINGS=true` in the compose file) and restart.
 
 ## Options
 

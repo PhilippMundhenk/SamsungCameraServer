@@ -131,6 +131,24 @@ class SettingsTest {
         assertEquals(setOf("storage.subfolder", "raw.quality"), s.config.cameraOverrides("127.0.0.1").keys)
     }
 
+    /** The page must never be able to remove itself: ui.settings and ui.enabled are file-only. */
+    @Test
+    fun settingsPageCannotSwitchItselfOff() {
+        val s = start(mapOf("CAMBACKUP_EXIF_TOOL" to "no-exiftool-here"))
+        val base = "http://127.0.0.1:${s.port}"
+        val page = http("GET", "$base/settings").second
+        assertFalse(page, page.contains("name=\"ui.settings\"") || page.contains("name=\"ui.enabled\""))
+        assertTrue(page.contains("config file only") && page.contains("CAMBACKUP_UI_SETTINGS"))
+        // a form that tries anyway (old page, hand-made request) changes nothing
+        val (code, _) = http("POST", "$base/settings", form("ui.settings" to "false", "ui.enabled" to "false", "raw.quality" to "77"),
+            mapOf("Content-Type" to "application/x-www-form-urlencoded"), followRedirects = false)
+        assertEquals(303, code)
+        assertTrue(s.config.uiSettings); assertTrue(s.config.uiEnabled)
+        assertEquals(77, s.config.rawJpegQuality)
+        assertEquals(200, http("GET", "$base/settings").first)
+        assertEquals(setOf("ui.enabled", "ui.settings"), SettingsCatalog.all.filter { it.fileOnly }.map { it.key }.toSet())
+    }
+
     @Test
     fun configSaveHandlesMissingFileUnknownKeysAndEscaping() {
         val cfg = TestSupport.config(dataDir, "hook.command" to "echo hi")

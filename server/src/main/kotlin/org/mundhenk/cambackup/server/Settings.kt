@@ -15,6 +15,11 @@ class SettingDef(
     /** Changing it needs a restart of the server (everything else applies to the next file/session). */
     val restart: Boolean = false,
     val secret: Boolean = false,
+    /**
+     * Shown but never changed from the browser: switching it off would remove the page that is
+     * needed to switch it back on. Changed only in cambackup.conf or the environment.
+     */
+    val fileOnly: Boolean = false,
 ) {
     enum class Type { TEXT, BOOL, SELECT, NUMBER }
 }
@@ -49,8 +54,8 @@ object SettingsCatalog {
         SettingDef("hook.command", "Hooks", "Command after every session", "Runs in the server's shell with CAMBACKUP_EVENT, CAMBACKUP_CAMERA, CAMBACKUP_USER, CAMBACKUP_SYSOFF, CAMBACKUP_STORED, CAMBACKUP_SKIPPED and CAMBACKUP_FILES (one path per line)."),
         SettingDef("sysoff.command", "Hooks", "Command when the camera asks to shut down", "The camera's \"Shut down PC after backup\" option."),
 
-        SettingDef("ui.enabled", "Web UI", "Status page and pairing download", "", SettingDef.Type.BOOL, restart = true),
-        SettingDef("ui.settings", "Web UI", "This settings page", "Switching it off here needs a config file edit to get it back.", SettingDef.Type.BOOL, restart = true),
+        SettingDef("ui.enabled", "Web UI", "Status page and pairing download", "", SettingDef.Type.BOOL, restart = true, fileOnly = true),
+        SettingDef("ui.settings", "Web UI", "This settings page", "", SettingDef.Type.BOOL, restart = true, fileOnly = true),
         SettingDef("ui.previews", "Web UI", "Previews on the status page", "Thumbnails next to the transferred files and a link to open each file. The status page is open to everyone on the network, so this shows more than file names do.", SettingDef.Type.BOOL),
     )
 
@@ -82,6 +87,7 @@ object SettingsCatalog {
         val updates = LinkedHashMap<String, String>()
         val errors = ArrayList<String>()
         for (def in all) {
+            if (def.fileOnly) continue                       // never from the browser, see SettingDef.fileOnly
             val raw = form[def.key] ?: continue
             when (def.type) {
                 SettingDef.Type.BOOL -> updates[def.key] = if (raw == "true" || raw == "on") "true" else "false"
@@ -202,7 +208,10 @@ object SettingsPage {
         val sb = StringBuilder("<tr><td class=\"k\"><label for=\"${esc(def.key)}\">${esc(def.label)}</label><br><code>${esc(def.key)}</code>")
         if (def.restart) sb.append(" <span class=\"badge restart\">restart</span>")
         sb.append("</td><td>")
-        if (env != null) {
+        if (def.fileOnly && env == null) {
+            sb.append("<code>${esc(effective.ifEmpty { "true" })}</code> <span class=\"badge env\">config file only</span>")
+            sb.append("<div class=\"help\">Not changeable here: switching it off would remove this page. Set <code>${esc(def.key)}</code> in <code>${esc(config.file.name)}</code> or <code>CAMBACKUP_${esc(def.key.uppercase().replace('.', '_'))}</code> in the environment.</div>")
+        } else if (env != null) {
             sb.append("<span class=\"badge env\">environment</span> <code>${esc(if (def.secret) "••••••" else env)}</code>")
             if (fileValue.isNotEmpty() && fileValue != env) sb.append("<div style=\"color:var(--muted);font-size:.85em\">file has <code>${esc(if (def.secret) "••••••" else fileValue)}</code>, ignored</div>")
         } else {

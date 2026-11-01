@@ -33,7 +33,7 @@ class Devices(private val file: File) {
             val p = line.split('\t')
             if (p.size >= 8) runCatching {
                 val d = Device(Kind.valueOf(p[0]), p[1], p[2], p[3].toLong(), p[4].toLong(), p[5].toInt(), p[6].toInt(), p[7], p.getOrNull(8) ?: "")
-                devices[d.key] = d
+                if (d.kind != Kind.CAMERA || isAddress(d.id)) devices[d.key] = d
             }
         }
     }
@@ -42,6 +42,8 @@ class Devices(private val file: File) {
     @Synchronized
     fun seen(kind: Kind, id: String, address: String, detail: String? = null, session: Boolean = false, files: Int = 0) {
         if (id.isBlank()) return
+        // cameras are known by their address; the phone's deferred sync reports "phone" and is no camera
+        if (kind == Kind.CAMERA && !isAddress(id)) return
         val now = System.currentTimeMillis()
         val old = devices["${kind.name}/${id.lowercase()}"]
         put(Device(kind, id, address, old?.firstSeen ?: now, now, (old?.sessions ?: 0) + (if (session) 1 else 0), (old?.files ?: 0) + files,
@@ -66,6 +68,11 @@ class Devices(private val file: File) {
         file.parentFile?.mkdirs()
         file.appendText(listOf(d.kind.name, d.id, d.address, d.firstSeen, d.lastSeen, d.sessions, d.files, d.detail.replace('\t', ' ').replace('\n', ' '), d.nickname).joinToString("\t", postfix = "\n"))
         return d
+    }
+
+    companion object {
+        /** An IPv4 or IPv6 address, which is how cameras are told apart. */
+        fun isAddress(s: String): Boolean = Regex("""\d{1,3}(\.\d{1,3}){3}""").matches(s) || (s.contains(':') && Regex("[0-9A-Fa-f:.%]+").matches(s))
     }
 
     /** Newest activity first. */

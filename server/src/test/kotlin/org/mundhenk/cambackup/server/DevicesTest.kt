@@ -115,6 +115,12 @@ class DevicesTest {
         s.devices.seen(Devices.Kind.PHONE, "Pixel 7", "10.0.0.10", "Dalvik", files = 1)
         assertEquals("Philipp's phone", s.devices.find(Devices.Kind.PHONE, "Pixel 7")!!.nickname)
         assertEquals(null, s.devices.rename(Devices.Kind.PHONE, "nobody", "x"))
+        // the phone's deferred sync reports the camera as "phone": that is no camera
+        s.devices.seen(Devices.Kind.CAMERA, "phone", "10.0.0.10", session = true)
+        assertEquals(null, s.devices.find(Devices.Kind.CAMERA, "phone"))
+        File(dataDir, "devices.tsv").appendText(listOf("CAMERA", "phone", "10.0.0.10", "1", "2", "1", "0", "", "").joinToString("\t", postfix = "\n"))
+        assertEquals(null, Devices(File(dataDir, "devices.tsv")).find(Devices.Kind.CAMERA, "phone"))   // old entries are dropped on load
+        assertTrue(Devices.isAddress("192.168.44.84") && Devices.isAddress("fe80::1") && !Devices.isAddress("phone") && !Devices.isAddress("1.2.3"))
     }
 
     /** Phone first, server later: the phone hands its identity to the server, which adopts it live. */
