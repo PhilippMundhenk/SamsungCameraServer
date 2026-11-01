@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-01
+
+### Changed
+- The folder layouts are labelled by what they create; "month" reads "Year folders with month
+  subfolders" (a photo from 1 January 2002 goes into `2002/01/`).
+
 ### Fixed
 - The settings page could switch itself off (`ui.settings`, or the whole web UI with
   `ui.enabled`), leaving no way back but editing the config file. Both are now read-only on

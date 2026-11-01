@@ -20,8 +20,8 @@ android {
         applicationId = "org.mundhenk.cambackup"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = tagVersion ?: "0.2.0-$gitSha"    // the hash tells installed builds apart (Settings footer, first log line)
+        versionCode = 3
+        versionName = tagVersion ?: "0.2.1-$gitSha"    // the hash tells installed builds apart (Settings footer, first log line)
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
