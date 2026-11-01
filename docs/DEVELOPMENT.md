@@ -54,8 +54,8 @@ Espresso suite with its gate on an emulator (API 34), multi-arch image build.
 
 * Tested against a real NX1000 (home server on the LAN, app on the phone's hotspot). The
   simulator mirrors what the camera was seen doing, including the Browse of a remembered
-  object before the first upload of a session; the open camera questions are in
-  [issue #6](https://github.com/PhilippMundhenk/SamsungCameraServer/issues/6). Every request the
+  object before the first upload of a session; the two details still unknown are listed in
+  DESIGN.md under open questions. Every request the
   camera makes is logged, so a new camera model can be checked from the app log or the server
   status page alone.
 * "File exists" UPnP error code for `CreateObject` is unknown; the server accepts and discards

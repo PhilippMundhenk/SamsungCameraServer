@@ -4,7 +4,7 @@
   <a href="https://github.com/PhilippMundhenk/SamsungCameraServer/actions/workflows/ci.yml"><img src="https://github.com/PhilippMundhenk/SamsungCameraServer/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="https://github.com/PhilippMundhenk/SamsungCameraServer/releases/latest"><img src="https://img.shields.io/github/v/release/PhilippMundhenk/SamsungCameraServer?sort=semver" alt="Latest release"></a>
   <a href="https://github.com/PhilippMundhenk/SamsungCameraServer/pkgs/container/cambackup-server"><img src="https://img.shields.io/badge/container-ghcr.io-2A6FDB?logo=docker&amp;logoColor=white" alt="Container image"></a>
-  <img src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&amp;logoColor=white" alt="Android 8.0+">
+  <a href="https://github.com/PhilippMundhenk/SamsungCameraServer/releases/latest"><img src="https://img.shields.io/badge/Android%20APK-8.0%2B-3DDC84?logo=android&amp;logoColor=white" alt="Android APK, Android 8.0+"></a>
   <img src="https://img.shields.io/badge/coverage%20gate-95%25-2E7D32" alt="95 % line coverage gate">
   <a href="LICENSE"><img src="https://img.shields.io/github/license/PhilippMundhenk/SamsungCameraServer" alt="License"></a>
   <a href="https://github.com/PhilippMundhenk/SamsungCameraServer/issues/26"><img src="https://img.shields.io/badge/Play%20Store-testers%20wanted-orange" alt="Play Store: testers wanted"></a>
@@ -98,6 +98,4 @@ web UI and is explained in [docs/SERVER.md](docs/SERVER.md).
 * [docs/DESIGN.md](docs/DESIGN.md) — design notes and decisions, [docs/BRANDING.md](docs/BRANDING.md) — look and feel
 
 Status: in daily use with a real NX1000, against the home server at home and the app on the
-phone's hotspot on the road. Remaining camera questions are collected in
-[issue #6](https://github.com/PhilippMundhenk/SamsungCameraServer/issues/6). Questions and
-problems: [GitHub issues](https://github.com/PhilippMundhenk/SamsungCameraServer/issues).
+phone's hotspot on the road. Questions and problems: [GitHub issues](https://github.com/PhilippMundhenk/SamsungCameraServer/issues).

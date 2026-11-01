@@ -96,7 +96,7 @@ POST ContentDirectory  X_BACKUP_DONE  {UDN, SystemOff}
   is UPnP error 701 "No such object". `GetProtocolInfo`, `GetTransferProgress`, `DestroyObject`,
   `StopTransferResource` are answered generically.
 * Duplicates: the server accepts and discards them (the exact UPnP error code the firmware
-  treats as "file exists" is unknown; see [issue #6](https://github.com/PhilippMundhenk/SamsungCameraServer/issues/6)).
+  treats as "file exists" is unknown; see the open questions in [DESIGN.md](DESIGN.md)).
 * Resumable uploads: the camera asks for them (`dlna:resumeUpload="1"` in its CreateObject
   DIDL) and both targets now answer the same way. A cut-off upload is kept in a spool
   (`<data>/spool` on the server, the app's private storage on the phone); a Browse of the
