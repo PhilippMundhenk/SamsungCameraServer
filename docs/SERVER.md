@@ -75,7 +75,7 @@ a short explanation, grouped into Camera, Storage, Pipeline, Hooks and Web UI. R
 | `server.udn` | from the ini / generated | set it to the UDN shown in the app so one card works with both |
 | `ssdp.enabled` | `true` | answer camera discovery; `false` for a phone-only backend behind port mapping |
 | `storage.dir` | `incoming` (`/photos` in the image) | where uploads land |
-| `storage.subfolder` | `flat` | folders under `storage.dir` from the camera's date: `flat` (none), `day` (`{yyyy}-{MM}-{dd}`), `month` (`{yyyy}/{MM}`), `year` (`{yyyy}`), or any pattern with `{yyyy} {MM} {dd}` and `/`. A second file with the same name gets `_1`, `_2`, … |
+| `storage.subfolder` | `flat` | folders under `storage.dir` from the camera's date: `flat` (none), `day` (`{yyyy}-{MM}-{dd}`), `month` (`{yyyy}/{MM}`, year folders with month subfolders: `2002/01/`), `year` (`{yyyy}`), or any pattern with `{yyyy} {MM} {dd}` and `/`. A second file with the same name gets `_1`, `_2`, … |
 | `api.token` | empty | bearer token the app must send (empty = anyone on the LAN can upload) |
 | `ui.enabled` | `true` | status page and pairing download |
 | `ui.settings` | `true` | the settings page at `/settings` |

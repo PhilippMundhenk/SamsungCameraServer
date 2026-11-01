@@ -52,7 +52,7 @@
     <string name="choose_folder">Choose folder…</string>
     <string name="folder_layout_title">Folders inside</string>
     <string name="layout_day">One folder per day (2026-10-29)</string>
-    <string name="layout_month">Year and month folders (2026/10)</string>
+    <string name="layout_month">Year folders with month subfolders (2026/10)</string>
     <string name="layout_year">One folder per year (2026)</string>
     <string name="layout_flat">No folders</string>
     <string name="folder_reset">Use app storage</string>

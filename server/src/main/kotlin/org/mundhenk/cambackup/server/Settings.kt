@@ -28,8 +28,8 @@ object SettingsCatalog {
         SettingDef("http.port", "Camera", "HTTP port", "Camera, phone and browser all use this port.", SettingDef.Type.NUMBER, placeholder = "52235", restart = true),
 
         SettingDef("storage.dir", "Storage", "Storage directory", "Where uploads land. /photos in the container.", placeholder = "incoming", restart = true),
-        SettingDef("storage.subfolder", "Storage", "Folder layout", "Folders under the storage directory, from the camera's date.", SettingDef.Type.SELECT,
-            listOf("flat" to "flat: no folders", "day" to "day: 2026-10-27", "month" to "month: 2026/10", "year" to "year: 2026")),
+        SettingDef("storage.subfolder", "Storage", "Folder layout", "Folders under the storage directory, from the camera's date. Year/month puts a photo from 1 January 2002 into 2002/01/.", SettingDef.Type.SELECT,
+            listOf("flat" to "No folders", "day" to "One folder per day: 2026-10-27/", "month" to "Year folders with month subfolders: 2026/10/", "year" to "One folder per year: 2026/")),
         SettingDef("api.token", "Storage", "Token for the phone and this page", "The Android app sends it as the backend token. Also protects this settings page (any user name, token as password). Empty = anyone on the LAN.", secret = true),
 
         SettingDef("exif.timeshift", "Pipeline", "EXIF time shift", "exiftool syntax: +1:00 (one hour later), -0:30, +0:0:1 0:0:0 (one day). Applied to every image before anything else.", placeholder = "+1:00"),
