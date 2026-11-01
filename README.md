@@ -1,5 +1,15 @@
 <p align="center"><img src="docs/logo.png" width="128" alt="Samsung Camera Backup"></p>
 
+<p align="center">
+  <a href="https://github.com/PhilippMundhenk/SamsungCameraServer/actions/workflows/ci.yml"><img src="https://github.com/PhilippMundhenk/SamsungCameraServer/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/PhilippMundhenk/SamsungCameraServer/releases/latest"><img src="https://img.shields.io/github/v/release/PhilippMundhenk/SamsungCameraServer?sort=semver" alt="Latest release"></a>
+  <a href="https://github.com/PhilippMundhenk/SamsungCameraServer/pkgs/container/cambackup-server"><img src="https://img.shields.io/badge/container-ghcr.io-2A6FDB?logo=docker&amp;logoColor=white" alt="Container image"></a>
+  <img src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?logo=android&amp;logoColor=white" alt="Android 8.0+">
+  <img src="https://img.shields.io/badge/coverage%20gate-95%25-2E7D32" alt="95 % line coverage gate">
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/PhilippMundhenk/SamsungCameraServer" alt="License"></a>
+  <a href="https://github.com/PhilippMundhenk/SamsungCameraServer/issues/26"><img src="https://img.shields.io/badge/Play%20Store-testers%20wanted-orange" alt="Play Store: testers wanted"></a>
+</p>
+
 # Samsung Camera Backup
 
 Get the photos and videos off your Samsung Wi-Fi camera again. The camera's built-in
