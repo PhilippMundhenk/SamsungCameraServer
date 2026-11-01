@@ -18,15 +18,21 @@ import java.time.Instant
 /**
  * Everything on the HTTP port that is not the camera protocol:
  *
- *   HEAD/PUT /api/v1/files/{date}/{name}   backend contract used by the Android app
+ *   HEAD/PUT /api/v1/files/{date}/{name}   backend contract used by the Android app (X-NX-User files it under a user)
  *   POST     /api/v1/events                {"type":"start"|"done","camera":"ip","sysOff":bool}
+ *   GET/POST /api/v1/identity[?user=]      the server's (or a user's) identity; POST adopts the phone's
+ *   GET      /api/v1/users                 users of a multi-user server
  *   GET      /api/v1/status                JSON for dashboards
  *   GET      /api/v1/log                   text
- *   GET      /                             status page
- *   GET      /pairing.zip | /SAMSUNGAutoBackupDESC.ini   pairing file for the SD card
+ *   GET      /health                       "ok"
+ *   GET      /                             status page; /thumb/{date}/{name} and /file/{date}/{name} (ui.previews)
+ *   GET/POST /settings                     settings page; /settings/adopt-env, /settings/users[/remove]
+ *   POST     /devices/rename               name a camera or phone
+ *   GET      /pairing.zip | /SAMSUNGAutoBackupDESC.ini [?user=]   pairing file for the SD card
  *
- * `/api/v1/files` and `/api/v1/events` require `Authorization: Bearer <api.token>` when a
- * token is configured. The UPnP paths stay open (the camera cannot authenticate).
+ * `/api/v1/files`, `/api/v1/events` and POST `/api/v1/identity` require `Authorization: Bearer
+ * <api.token>` when a token is configured; the settings pages and /devices/rename take it as HTTP
+ * Basic password. The UPnP paths stay open (the camera cannot authenticate).
  */
 class Api(
     private val config: Config,

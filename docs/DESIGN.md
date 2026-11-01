@@ -92,10 +92,11 @@ core/  (Kotlin, JVM, zero dependencies — runs on Android and on servers/CI)
   SsdpResponder    multicast listener, M-SEARCH replies, periodic NOTIFY alive/byebye
   BackupServer     routing + SOAP action handling; stats; pending-object table
   BackupSink       interface: onBackupStart / exists / store / onBackupDone
-  FileSystemSink   <root>/<date>/<name>, dedup by name+size, .part + rename
+  FileSystemSink   <root>/<layout folder>/<name>, dedup by name+size, .part + rename, short uploads rejected
+  Layout           folder layouts from the camera date: flat | day | month | year | {yyyy}{MM}{dd} pattern
   CameraSimulator  acts like the camera (used by JVM e2e, Espresso e2e, manual tests)
   Main             CLI: serve <dir> | pairing <name> | e2e [--ssdp]
-server/ (Kotlin/JVM, depends only on core; Docker image eclipse-temurin 17 + exiftool + libraw)
+server/ (Kotlin/JVM, depends only on core; Docker image eclipse-temurin 17 + exiftool + RawTherapee + libraw)
   Config           <data>/cambackup.conf (properties, commented defaults written on first start)
                    + env overrides CAMBACKUP_<KEY>
   Main             CamBackupServer.start(dataDir): wires everything; identity lives in
@@ -117,6 +118,12 @@ server/ (Kotlin/JVM, depends only on core; Docker image eclipse-temurin 17 + exi
   Devices          who talked to the server: cameras by address, phones by X-NX-Device nickname
                    (devices.tsv), listed on the status page
   Tools            runs external programs, probes availability once (shown on status page)
+  Settings         SettingsCatalog (every key, sections, per-camera keys, form parsing), SettingsPage,
+                   Html (shared page chrome and tokens for status and settings page)
+  Thumbnails       status-page previews, rendered once into <data>/thumbs (RAW via the rendered JPEG)
+  UserServers      multi-user: one camera-facing BackupServer per user (own identity, port, folder,
+                   ledger, spool); Config.forCameraAndUser layers camera.<id>.* over user.<name>.*
+  ServerLog        in-memory log ring buffer behind /api/v1/log and the status page
 app/   (Android, minSdk 26, Views + Material 3, ViewBinding; tokens from docs/BRANDING.md)
   MainActivity     status card (running dot, destination, Start/Stop, Sync), transfer list
                    (RecyclerView, ✓ / ✓✓), toolbar -> Log, Settings; opens the wizard on first start
@@ -137,6 +144,8 @@ app/   (Android, minSdk 26, Views + Material 3, ViewBinding; tokens from docs/BR
   Hotspot          opens the system's hotspot settings (apps cannot switch the hotspot on)
   Prefs            SharedPreferences; Mode PHONE | PHONE_AND_SERVER | SERVER; UDN generated once
   LogBus           in-process log ring buffer feeding the UI
+  IdentityExchange take the server's (or a server user's) identity, or hand the phone's to the server
+  Ui               shared view helpers: edge-to-edge, https warning, folder-layout radios, open a file
 ```
 
 ### Design decisions
@@ -269,7 +278,7 @@ rest in the next run because uploaded files are flagged `IsBackup` on the card.
 Run the first session with the app log (or the server status page) visible; every camera
 request is logged. Checked against the NX1100 manual (p. 117 f.): the camera stores the PC
 information itself (our pairing file), backs up only new files, can shut the PC down afterwards
-(`SysOff`), turns itself off ~30 s after the transfer, and needs the PC firewall open — i.e.
+(`SystemOff`), turns itself off ~30 s after the transfer, and needs the PC firewall open — i.e.
 52235/tcp and 1900/udp.
 
 ## 8. Build / test / CI

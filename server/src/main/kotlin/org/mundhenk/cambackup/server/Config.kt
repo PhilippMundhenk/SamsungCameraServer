@@ -288,10 +288,10 @@ class Config(val dataDir: File, private val props: Properties, private val env: 
             |webhook.url=
             |webhook.token=
             |
-            |# Shell command run after every session (env: CAMBACKUP_EVENT, CAMBACKUP_CAMERA, CAMBACKUP_SYSOFF,
+            |# Shell command run after every session (env: CAMBACKUP_EVENT, CAMBACKUP_CAMERA, CAMBACKUP_USER, CAMBACKUP_SYSOFF,
             |# CAMBACKUP_FILES (one path per line), CAMBACKUP_STORED, CAMBACKUP_SKIPPED).
             |hook.command=
-            |# Command run when the camera asks to shut the PC down after the backup ("SysOff").
+            |# Command run when the camera asks to shut the PC down after the backup (SystemOff=1).
             |sysoff.command=
             |""".trimMargin()
     }

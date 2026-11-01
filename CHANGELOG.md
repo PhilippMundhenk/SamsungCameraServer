@@ -49,16 +49,6 @@ All notable changes to this project are documented here. The format follows
   with the app closed) until everything is on the server; *Upload automatically* in Settings
   switches it off. Tapping a file in the list opens it in the phone's viewer; JPEGs show a
   preview.
-- Fixed: an upload the camera stopped mid-file (cancelled on the camera) was recorded on the
-  phone as complete and then failed to sync ("short upload"). Both phone sinks and the core
-  file sink now reject short uploads; the uploader drops an incomplete file it finds (the
-  camera sends it again).
-- Fixed: the second Auto Backup session stalled on both targets. After X_BACKUP_START the
-  NX1000 browses the last object of its previous session; the server answered with an empty
-  result and the camera waited forever. Browse now serves a small content tree (root with an
-  "Auto Backup" folder, the parentIDs handed out in CreateObject, objects still waiting for
-  their upload) and UPnP error 701 for anything else, which lets the camera continue. The
-  session start recognises the camera's `NumOfContents`. (#23)
 - Every protocol request is logged (service descriptions, SUBSCRIBE, Browse and the other
   ContentDirectory/ConnectionManager actions, connections closed without a request), so a
   camera that stops after the session start shows what it did next.
@@ -69,8 +59,6 @@ All notable changes to this project are documented here. The format follows
 - Android: generating a new UDN asks for confirmation and explains that cameras paired with
   the old one stop syncing; replaced UDNs are kept in a history in Settings and can be
   switched back to.
-
-### Added
 - Device management (#22): the app shows whether it shares the server's identity and can take
   the server's UDN or hand its own to the server (`GET`/`POST /api/v1/identity`; the server
   rewrites its pairing file and switches its camera side over live, without a restart). The UDN history records where
@@ -95,6 +83,16 @@ All notable changes to this project are documented here. The format follows
   export target. Move `data/incoming/*` into `photos/` when upgrading.
 
 ### Fixed
+- An upload the camera stopped mid-file (cancelled on the camera) was recorded on the
+  phone as complete and then failed to sync ("short upload"). Both phone sinks and the core
+  file sink now reject short uploads; the uploader drops an incomplete file it finds (the
+  camera sends it again).
+- The second Auto Backup session stalled on both targets. After X_BACKUP_START the
+  NX1000 browses the last object of its previous session; the server answered with an empty
+  result and the camera waited forever. Browse now serves a small content tree (root with an
+  "Auto Backup" folder, the parentIDs handed out in CreateObject, objects still waiting for
+  their upload) and UPnP error 701 for anything else, which lets the camera continue. The
+  session start recognises the camera's `NumOfContents`. (#23)
 - Truncated chunked uploads were accepted as complete.
 - Title overlapped the status bar on Android 15. (#2)
 

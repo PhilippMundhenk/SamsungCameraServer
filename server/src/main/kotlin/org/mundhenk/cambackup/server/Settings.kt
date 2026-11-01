@@ -46,7 +46,7 @@ object SettingsCatalog {
 
         SettingDef("webhook.url", "Hooks", "Webhook URL", "Receives a JSON summary after every session (e.g. a Home Assistant webhook).", placeholder = "http://homeassistant.lan:8123/api/webhook/cambackup"),
         SettingDef("webhook.token", "Hooks", "Webhook bearer token", "Sent as Authorization: Bearer.", secret = true),
-        SettingDef("hook.command", "Hooks", "Command after every session", "Runs in the server's shell with CAMBACKUP_EVENT, CAMBACKUP_CAMERA, CAMBACKUP_SYSOFF, CAMBACKUP_STORED, CAMBACKUP_SKIPPED and CAMBACKUP_FILES (one path per line)."),
+        SettingDef("hook.command", "Hooks", "Command after every session", "Runs in the server's shell with CAMBACKUP_EVENT, CAMBACKUP_CAMERA, CAMBACKUP_USER, CAMBACKUP_SYSOFF, CAMBACKUP_STORED, CAMBACKUP_SKIPPED and CAMBACKUP_FILES (one path per line)."),
         SettingDef("sysoff.command", "Hooks", "Command when the camera asks to shut down", "The camera's \"Shut down PC after backup\" option."),
 
         SettingDef("ui.enabled", "Web UI", "Status page and pairing download", "", SettingDef.Type.BOOL, restart = true),

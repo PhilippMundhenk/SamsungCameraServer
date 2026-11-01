@@ -35,7 +35,7 @@ Every module has a **95 % line-coverage gate** (JaCoCo); `check` fails below it.
   EXIF-based rename, export into a second volume, token auth and dedup switched on.
 * `tools/e2e-jvm.sh [--ssdp]` — loopback e2e without Gradle; `--ssdp` also exercises multicast.
 
-Measured on 2026-10-27: core 96.9 %, server 98.3 %, app 97.4 % lines.
+Measured on 2026-11-01 (0.2.0): core 95.8 %, server 98.7 %, app 96.4 % lines.
 
 ## CI and releases
 

@@ -122,7 +122,7 @@ class BackupServer(
         return when (action) {
             "X_BACKUP_START" -> {
                 stats.sessions.incrementAndGet(); stats.lastCamera = req.remoteAddress
-                // FileCnt is what the camera intends to send: files not yet flagged as backed up on its
+                // NumOfContents (FileCnt in older notes) is what the camera intends to send: files not yet flagged as backed up on its
                 // card. 0 means the camera will sit on its transfer screen and send nothing.
                 val announced = Regex("<(?:\\w+:)?(?:NumOfContents|FileCnt)[^>]*>\\s*(\\d+)\\s*</(?:\\w+:)?(?:NumOfContents|FileCnt)>").find(bodyText)?.groupValues?.get(1)?.toIntOrNull()
                 log("Backup session started by ${req.remoteAddress}" + when (announced) {

@@ -87,7 +87,9 @@ a short explanation, grouped into Camera, Storage, Pipeline, Hooks and Web UI. R
 | `webhook.url`, `webhook.token` | off | POST a JSON session summary (e.g. Home Assistant) |
 | `hook.command` | off | shell command after every session (`CAMBACKUP_FILES`, `CAMBACKUP_STORED`, …) |
 | `sysoff.command` | off | runs when the camera asks to shut the PC down |
+| `exif.tool` | `exiftool` | name or path of the exiftool binary |
 | `tools.path` | empty | extra directories searched for exiftool / converters before `PATH` |
+| `users` | empty | several users on one server, e.g. `alice,bob`; see [Several users on one server](#several-users-on-one-server) |
 
 The pipeline runs per file on a worker thread, in order: EXIF time shift → RAW preview →
 rename → export. A stage whose tool is missing is skipped with a log line; the status page

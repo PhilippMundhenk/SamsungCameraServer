@@ -302,7 +302,7 @@ class Pipeline(
             log("hook.command exit ${r.exitCode}" + if (r.output.isNotBlank()) ": ${r.output.lines().last()}" else "")
         }
         if (sysOff) config.sysOffCommand?.let { cmd ->
-            log("Camera requested shutdown (SysOff) -> running sysoff.command")
+            log("Camera requested shutdown (SystemOff) -> running sysoff.command")
             val r = tools.shell(cmd, env)
             log("sysoff.command exit ${r.exitCode}")
         }

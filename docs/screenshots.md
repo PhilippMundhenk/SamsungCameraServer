@@ -21,8 +21,8 @@ Three steps on first start: where photos go, folder or server, pairing file.
 
 ## App: settings
 
-Everything from the wizard, plus the identity the camera is paired with. Locked while the
-server runs.
+Everything from the wizard (folder, folder layout, server, automatic upload), plus the
+identity the camera is paired with. Locked while the server runs.
 
 ![Settings](screenshots/app-settings.png)
 
@@ -40,3 +40,9 @@ Every option of `cambackup.conf` with an explanation. Values from the compose fi
 `environment` badge and are read-only; "restart" marks what needs a restart.
 
 ![Settings page](screenshots/web-settings.png)
+
+Further down: per-camera settings for every camera the server has seen (empty fields inherit
+the general value; here the NX1000 gets its own folder layout and rename pattern) and the
+users of a shared server, each with their own pairing file.
+
+![Per-camera settings and users](screenshots/web-settings-cameras-users.png)
