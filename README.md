@@ -29,6 +29,8 @@ One pairing file on the SD card serves both.
 ## Getting started with the app
 
 1. Install the APK from the [releases page](https://github.com/PhilippMundhenk/SamsungCameraServer/releases).
+   A Play Store release needs 12 testers first: if you own one of these cameras, see
+   [issue #26](https://github.com/PhilippMundhenk/SamsungCameraServer/issues/26).
 2. The first start runs a short wizard: where photos should go, the folder or server, and the
    name the camera will show.
 3. **Export pairing file** (wizard or Settings) and unzip the file into the root of the camera's
