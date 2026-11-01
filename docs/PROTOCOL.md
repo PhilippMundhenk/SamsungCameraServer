@@ -102,8 +102,8 @@ POST ContentDirectory  X_BACKUP_DONE  {UDN, SystemOff}
   (`<data>/spool` on the server, the app's private storage on the phone); a Browse of the
   object reports `dlna:uploadedSize`, and a POST with `Content-Range: bytes <from>-…`
   continues from there. Whether the NX1000 really sends that header on resume is not
-  confirmed yet ([issue #18](https://github.com/PhilippMundhenk/SamsungCameraServer/issues/18));
-  a POST without it starts the file over, which is what happened before as well.
+  confirmed yet: in the one interrupted session seen, it created the file again and sent it in
+  full. A POST without the header starts the file over, which the server handles.
 * Networking: SSDP is multicast with TTL 2, so the target must be on the camera's L2 segment
   (same Wi-Fi, the phone's hotspot, or host/macvlan networking for the container). Ports:
   52235/tcp, 1900/udp.

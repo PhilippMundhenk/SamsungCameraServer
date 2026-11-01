@@ -273,8 +273,8 @@ rest in the next run because uploaded files are flagged `IsBackup` on the card.
 7. Behaviour after a dropped upload: the camera keeps the server's ObjectID as `BackupID` and
    asks for it next time (Browse); given `dlna:uploadedSize` it resumes from that offset, given
    701 it starts the file over. Both targets now spool unfinished uploads, keep pending objects
-   across restarts and accept `Content-Range` on the continuation (issue #18); whether the
-   camera sends exactly that header is the remaining question.
+   across restarts and accept `Content-Range` on the continuation; whether the camera sends exactly that header
+   is the remaining question (in the one interrupted session seen it re-sent the file in full).
 Run the first session with the app log (or the server status page) visible; every camera
 request is logged. Checked against the NX1100 manual (p. 117 f.): the camera stores the PC
 information itself (our pairing file), backs up only new files, can shut the PC down afterwards
@@ -298,7 +298,7 @@ view-binding/R classes are excluded.
   chunked PUT / malformed paths / short uploads, config precedence, ledger garbage tolerance,
   Tools (search path, timeout, shell), every pipeline stage with fake `exiftool`, `dcraw_emu`,
   `darktable-cli`, `rawtherapee-cli` written into `tools.path` (Windows `.cmd` / POSIX sh),
-  hooks + webhook + SysOff, PPM reader errors, and the **phone relay e2e**: camera simulator →
+  hooks + webhook + SystemOff, PPM reader errors, and the **phone relay e2e**: camera simulator →
   core `BackupServer` + `BackendSink` (what the app runs) → home server → disk/ledger/pipeline.
 * `./gradlew :app:connectedDebugAndroidTest :app:jacocoAndroidTestCoverageVerification` —
   Espresso: phone mode e2e with the ✓ list and Log screen, phone + server mode (automatic upload,

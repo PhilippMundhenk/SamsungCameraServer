@@ -50,6 +50,15 @@ Espresso suite with its gate on an emulator (API 34), multi-arch image build.
   `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` when they exist;
   otherwise it is debug-signed (installable, but updates require the same signature).
 
+## Consistency check
+
+`python tools/consistency_check.py` compares docs and code: every setting and HTTP route
+documented, every module named in DESIGN.md, no retired terms (old names, renamed buttons,
+pre-firmware protocol names), no references to closed issues, a well-formed CHANGELOG,
+screenshots newer than the screens they show, coverage numbers matching the reports. The
+rules are in `tools/consistency.json`; CI runs it on every push and the release job waits
+for it (`--version` on tags checks that the changelog has the dated section).
+
 ## Status / known gaps
 
 * Tested against a real NX1000 (home server on the LAN, app on the phone's hotspot). The

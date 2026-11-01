@@ -1,0 +1,63 @@
+{
+  "_doc": "Consistency rules for tools/consistency_check.py (master copy: ~/.claude/skills/release). Run: python3 tools/consistency_check.py",
+  "checks": [
+    {
+      "name": "config-keys-documented", "type": "listed", "severity": "error",
+      "source": ["server/src/main/kotlin/org/mundhenk/cambackup/server/Settings.kt"],
+      "pattern": "SettingDef\\(\"([a-z][a-z0-9.]*)\"",
+      "targets": [
+        {"file": "docs/SERVER.md", "format": "`{}`"},
+        {"file": "server/src/main/kotlin/org/mundhenk/cambackup/server/Config.kt", "format": "|{}="}
+      ]
+    },
+    {
+      "name": "routes-documented", "type": "listed", "severity": "error",
+      "source": ["server/src/main/kotlin/org/mundhenk/cambackup/server/Api.kt"],
+      "pattern": "path == \"(/[^\"]*)\"|path\\.startsWith\\(\"(/[^\"]*)\"\\)",
+      "ignore": ["/", "/settings/adopt-env", "/settings/users", "/settings/users/remove"],
+      "targets": [{"file": "docs/SERVER.md"}]
+    },
+    {
+      "name": "modules-in-design-doc", "type": "mentioned", "severity": "error",
+      "files": ["core/src/main/kotlin/**/*.kt", "server/src/main/kotlin/**/*.kt", "app/src/main/kotlin/**/*.kt"],
+      "docs": ["docs/DESIGN.md"]
+    },
+    {
+      "name": "retired-terms", "type": "retired", "severity": "error",
+      "scope": ["*.md", "**/*.md", "**/*.kt", "**/*.kts", "**/*.xml", "**/*.yml", "**/*.sh", "Dockerfile"],
+      "allow_in": ["CHANGELOG.md", "docs/CHAT_TRANSCRIPT.txt", "*/src/test/*", "*/src/androidTest/*", "tools/consistency.json"],
+      "terms": [
+        {"term": "nxbackup", "case": false, "hint": "old project name, use cambackup / Samsung Camera Backup"},
+        {"regex": "\\bFileCnt\\b", "term": "FileCnt", "hint": "the camera sends NumOfContents", "allow_in": ["core/src/main/kotlin/org/mundhenk/cambackup/core/BackupServer.kt"]},
+        {"regex": "\\bSysOff\\b", "term": "SysOff", "hint": "the camera sends SystemOff (the phone API field sysOff is ours and fine)", "allow_in": ["core/src/main/kotlin/org/mundhenk/cambackup/core/BackupServer.kt"]},
+        {"term": "Sync to server", "hint": "the button is 'Sync now'"}
+      ]
+    },
+    {
+      "name": "closed-issue-references", "type": "closed_issues", "severity": "error",
+      "docs": ["README.md", "docs/*.md"],
+      "ignore": ["CHANGELOG.md"]
+    },
+    {
+      "name": "changelog", "type": "changelog", "severity": "error",
+      "file": "CHANGELOG.md"
+    },
+    {
+      "name": "screenshots-fresh", "type": "fresh", "severity": "warn",
+      "items": [
+        {"image": "docs/screenshots/app-main.png", "sources": ["app/src/main/res/layout/activity_main.xml", "app/src/main/res/layout/item_transfer.xml"]},
+        {"image": "docs/screenshots/app-settings.png", "sources": ["app/src/main/res/layout/activity_settings.xml"]},
+        {"image": "docs/screenshots/app-wizard.png", "sources": ["app/src/main/res/layout/activity_wizard.xml"]},
+        {"image": "docs/screenshots/web-settings.png", "sources": ["server/src/main/kotlin/org/mundhenk/cambackup/server/Settings.kt"]}
+      ]
+    },
+    {
+      "name": "coverage-numbers", "type": "coverage", "severity": "warn", "doc": "docs/DEVELOPMENT.md", "tolerance": 0.5,
+      "items": [
+        {"name": "core", "doc_regex": "core ([0-9.]+) %", "report": "core/build/reports/jacoco/test/jacocoTestReport.xml"},
+        {"name": "server", "doc_regex": "server ([0-9.]+) %", "report": "server/build/reports/jacoco/test/jacocoTestReport.xml"},
+        {"name": "app", "doc_regex": "app ([0-9.]+) %", "report": "app/build/reports/jacoco/jacocoAndroidTestReport/*.xml"}
+      ]
+    }
+  ]
+}

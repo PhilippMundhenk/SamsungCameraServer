@@ -145,11 +145,26 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  consistency:
+    name: Docs and code consistency
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0          # the screenshot freshness check compares commit dates
+      - name: Consistency check (config keys, routes, modules, retired terms, closed issues, changelog)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/consistency_check.py --config tools/consistency.json ${{ startsWith(github.ref, 'refs/tags/v') && format('--version {0}', github.ref_name) || '' }}
+
   release:
     name: GitHub release (tags)
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-    needs: [test, ui-test, image]
+    needs: [test, ui-test, image, consistency]
     steps:
       - uses: actions/download-artifact@v8
         with:
