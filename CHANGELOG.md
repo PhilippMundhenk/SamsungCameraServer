@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-01
+
 ### Added
 - Renamed to Samsung Camera Backup (code name `cambackup`); independence note everywhere.
 - Android: first-start wizard, settings screen, log screen, transfer list with ✓ (on the

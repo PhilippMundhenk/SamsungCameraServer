@@ -9,6 +9,9 @@ val gitSha: String = runCatching {
     providers.exec { commandLine("git", "rev-parse", "--short=7", "HEAD") }.standardOutput.asText.get().trim()
 }.getOrDefault("").ifEmpty { "unknown" }
 
+// A release built from a v* tag in CI is plain "0.2.0"; every other build carries the hash.
+val tagVersion: String? = System.getenv("GITHUB_REF_NAME")?.takeIf { System.getenv("GITHUB_REF_TYPE") == "tag" && it.startsWith("v") }?.removePrefix("v")
+
 android {
     namespace = "org.mundhenk.cambackup.app"
     compileSdk = 35
@@ -18,7 +21,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 2
-        versionName = "0.2.0-$gitSha"    // the hash tells installed builds apart (Settings footer, first log line)
+        versionName = tagVersion ?: "0.2.0-$gitSha"    // the hash tells installed builds apart (Settings footer, first log line)
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

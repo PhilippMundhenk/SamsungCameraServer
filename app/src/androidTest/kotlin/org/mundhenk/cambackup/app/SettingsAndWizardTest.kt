@@ -99,7 +99,7 @@ class SettingsAndWizardTest {
             onView(withId(R.id.folderLabel)).check(matches(withText(R.string.folder_default)))
 
             // the footer names the installed build (version + git hash)
-            onView(withId(R.id.versionLabel)).perform(scrollTo()).check(matches(withSubstring("Samsung Camera Backup 0.2.0-")))
+            onView(withId(R.id.versionLabel)).perform(scrollTo()).check(matches(withSubstring("Samsung Camera Backup 0.2.0")))
             // server fields are only shown in the server modes
             onView(withId(R.id.modePhoneAndServer)).perform(scrollTo(), tap())
             onView(withId(R.id.backendUrl)).perform(scrollTo(), replaceText("http://nas.lan:52235/"), closeSoftKeyboard())
