@@ -111,7 +111,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-qemu-action@v4
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
       - name: Smoke test the image (phone API, pipeline, /photos + /export volumes, token, dedup)
         run: |
           pip install --quiet pillow
