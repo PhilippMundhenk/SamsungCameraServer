@@ -78,6 +78,29 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("autoSync", true)
         set(v) = sp.edit().putBoolean("autoSync", v).apply()
 
+    /**
+     * Remote Viewfinder: the id this phone pairs with ("allow this device?" on the camera). A
+     * locally administered pseudo-MAC, fixed per installation, so the camera asks only once.
+     */
+    val rvfClientId: String
+        get() {
+            sp.getString("rvfClientId", null)?.let { return it }
+            val r = java.security.SecureRandom()
+            val fresh = "02:" + (1..5).joinToString(":") { "%02x".format(r.nextInt(256)) }
+            sp.edit().putString("rvfClientId", fresh).apply()
+            return fresh
+        }
+
+    /** Remote Viewfinder: camera address typed by the user ("" = the Wi-Fi gateway). */
+    var rvfAddress: String
+        get() = sp.getString("rvfAddress", "") ?: ""
+        set(v) = sp.edit().putString("rvfAddress", v.trim()).apply()
+
+    /** Remote Viewfinder: copy every picture taken from the phone into the phone folder. */
+    var rvfSaveShots: Boolean
+        get() = sp.getBoolean("rvfSaveShots", true)
+        set(v) = sp.edit().putBoolean("rvfSaveShots", v).apply()
+
     /** The first-start wizard has been completed (or skipped). */
     var setupDone: Boolean
         get() = sp.getBoolean("setupDone", false)

@@ -72,6 +72,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean = when (item.itemId) {
+        R.id.action_viewfinder -> { startActivity(Intent(this, ViewfinderActivity::class.java)); true }
         R.id.action_settings -> { startActivity(Intent(this, SettingsActivity::class.java)); true }
         R.id.action_log -> { startActivity(Intent(this, LogActivity::class.java)); true }
         R.id.action_clear_transfers -> { Transfers.clear(); Thumbnails.clear(); true }

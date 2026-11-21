@@ -16,6 +16,8 @@ Get the photos and videos off your Samsung Wi-Fi camera again. The camera's buil
 *Auto Backup* pushes every new file over Wi-Fi to a "PC" of your choice: this project is that
 PC, as an **Android app** for the road and as a **home server** (Docker) for your network.
 Samsung's own software is gone; the camera still works.
+The app also brings back the **Remote Viewfinder**: the camera's live view on the phone, with
+the shutter.
 
 > Samsung Camera Backup is an independent open-source project. It has no relation to Samsung
 > Electronics and is neither endorsed nor supported by them. "Samsung" and the camera model
@@ -91,9 +93,9 @@ web UI and is explained in [docs/SERVER.md](docs/SERVER.md).
 
 ## Documentation
 
-* [docs/APP.md](docs/APP.md) — the Android app: modes, pairing, daily use
+* [docs/APP.md](docs/APP.md) — the Android app: modes, pairing, daily use, Remote Viewfinder
 * [docs/SERVER.md](docs/SERVER.md) — the home server: options, pipeline, networking, API
-* [docs/PROTOCOL.md](docs/PROTOCOL.md) — what the camera does (reverse engineered)
+* [docs/PROTOCOL.md](docs/PROTOCOL.md) — what the camera does (reverse engineered), Auto Backup and Remote Viewfinder
 * [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — building, tests and coverage, CI, releases, known gaps
 * [docs/DESIGN.md](docs/DESIGN.md) — design notes and decisions, [docs/BRANDING.md](docs/BRANDING.md) — look and feel
 
