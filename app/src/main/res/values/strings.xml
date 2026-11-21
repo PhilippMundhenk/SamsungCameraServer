@@ -146,5 +146,8 @@
     <string name="vf_zoom_out_short">W</string>
     <string name="vf_shot_saved">%1$s saved to the phone folder</string>
     <string name="vf_shot_on_card">Picture taken, it is on the camera\'s card (Auto Backup brings it over later)</string>
+    <string name="vf_preview_saved">Preview %1$s saved to the phone folder; the full picture comes with Auto Backup</string>
+    <string name="vf_focus_failed">Could not focus, no picture taken</string>
+    <string name="vf_card_full">The camera\'s card is full</string>
     <string name="vf_command_failed">The camera did not do that: %1$s</string>
 </resources>

@@ -80,9 +80,12 @@ Wi-Fi). Toolbar → camera icon.
 3. **Connect.** The address is filled in from the Wi-Fi (the camera is its gateway, usually
    `192.168.102.1`); type another one only if that is wrong. The first time, the camera asks
    whether to allow this phone: confirm on the camera.
-4. **Shutter** focuses and takes the picture on the camera. With *Copy pictures taken from here
-   to the phone folder* on, the app downloads it into the phone folder and lists it like a
-   backed-up file. Otherwise it stays on the card for the next Auto Backup.
+4. **Shutter** (enabled once the camera answered the first focus) focuses and takes the picture on
+   the camera. If the camera cannot focus, no picture is taken, as on the camera itself. With *Copy
+   pictures taken from here to the phone folder* on, the app downloads it into the phone folder and
+   lists it like a backed-up file. The NX1000 and the other 2012 models hand out only a small copy:
+   it is saved as `SAM_xxxx_preview.JPG`, and the full picture arrives with the next Auto Backup.
+   The live view pauses while the camera takes the picture and comes back on its own.
 
 Leaving the screen ends the session; the camera closes its viewfinder. After a lost connection
 the camera may need up to a minute before it streams again. Everything the camera answered is

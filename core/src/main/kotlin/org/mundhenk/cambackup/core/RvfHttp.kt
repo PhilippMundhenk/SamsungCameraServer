@@ -29,7 +29,7 @@ class RvfHttpResponse(
  */
 class RvfHttp(
     private val socketFactory: SocketFactory = SocketFactory.getDefault(),
-    private val connectTimeoutMs: Int = 10_000,
+    private val connectTimeoutMs: Int = 15_000,
 ) {
     fun request(
         host: String,
@@ -39,15 +39,16 @@ class RvfHttp(
         headers: List<Pair<String, String>> = emptyList(),
         body: ByteArray? = null,
         readTimeoutMs: Int = 25_000,
+        connectTimeout: Int = connectTimeoutMs,
     ): RvfHttpResponse {
         val socket = socketFactory.createSocket()
         try {
-            socket.connect(InetSocketAddress(host, port), connectTimeoutMs)
+            socket.connect(InetSocketAddress(host, port), connectTimeout)
             socket.soTimeout = readTimeoutMs
             socket.tcpNoDelay = true
             val head = StringBuilder()
             head.append("$method $path HTTP/1.0\r\n")
-            head.append("Host: $host:$port\r\n")
+            head.append("HOST: $host\r\n") // like Samsung's apps: no port
             for ((k, v) in headers) head.append("$k: $v\r\n")
             if (body != null) head.append("Content-Length: ${body.size}\r\n")
             head.append("Connection: close\r\n\r\n")

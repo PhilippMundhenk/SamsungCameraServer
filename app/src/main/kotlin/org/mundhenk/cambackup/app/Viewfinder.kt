@@ -106,8 +106,10 @@ class H264Decoder(surface: Surface, width: Int, height: Int) {
 }
 
 /**
- * One Remote Viewfinder session: pairing + GetInfomation, the live stream (opened right away, the
- * NX1000 needs that), and a single command thread so focus / shutter / zoom never overlap. All
+ * One Remote Viewfinder session, run the way Samsung's apps run it: pairing + GetInfomation, the
+ * live stream opened right away (the NX1000 needs that), a half-press + release once the first
+ * frame is there, and a single command thread so focus / shutter / zoom never overlap. The camera
+ * ends the stream for every picture; it is opened again once the picture is fetched. All
  * callbacks arrive on the main thread.
  */
 class ViewfinderSession(
@@ -115,6 +117,8 @@ class ViewfinderSession(
     private val host: String,
     private val port: Int,
     private val listener: Listener,
+    /** How long to keep trying to reopen the live view (the camera needs up to a minute). */
+    private val reopenTimeoutMs: Long = 60_000,
     private val surface: () -> Surface?,
 ) {
     enum class State { CONNECTING, LIVE, CLOSED, FAILED }
@@ -123,6 +127,8 @@ class ViewfinderSession(
         fun onState(state: State, message: String)
         fun onConnected(client: RvfClient, info: RvfInfo) {}
         fun onStream(codec: VideoCodec, width: Int, height: Int) {}
+        /** The camera answered the first half-press: the shutter can be used. */
+        fun onReady() {}
         fun onJpegFrame(bitmap: Bitmap) {}
         fun onShot(name: String?, savedAs: String?, message: String) {}
         fun onZoom(position: Int?) {}
@@ -132,10 +138,15 @@ class ViewfinderSession(
     private val main = Handler(Looper.getMainLooper())
     private val commands: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "rvf-commands").apply { isDaemon = true } }
     private val closed = AtomicBoolean(false)
+    /** A picture is being taken / fetched: the stream is down on purpose, do not reopen yet. */
+    private val capturing = AtomicBoolean(false)
+    private val captureDone = Object()
     @Volatile private var stream: RvfHttpResponse? = null
     @Volatile private var decoder: H264Decoder? = null
     @Volatile var client: RvfClient? = null; private set
     val framesShown = AtomicLong(0)
+    /** How often the live view was (re)opened. */
+    val streamOpens = AtomicLong(0)
     val framesDecoded: Long get() = decoder?.decoded?.get() ?: framesShown.get()
 
     fun start() {
@@ -148,18 +159,49 @@ class ViewfinderSession(
             val c = RvfClient(host, port, prefs.rvfClientId, RvfHttp(CameraNetwork.socketFactory(context, host)), { LogBus.log("Viewfinder: $it") })
             val info = c.connect()
             client = c
-            val (resp, reader) = c.openStream()
-            stream = resp
-            if (closed.get()) { resp.close(); return }
-            if (c.has("HeartBeat")) commands.scheduleWithFixedDelay({ runCatching { c.heartBeat() } }, 3, 3, TimeUnit.SECONDS)
+            if (c.has("HeartBeat")) commands.scheduleWithFixedDelay({ if (!capturing.get()) runCatching { c.heartBeat() } }, 3, 3, TimeUnit.SECONDS)
             post { listener.onConnected(c, info); listener.onState(State.LIVE, context.getString(R.string.vf_live, c.friendlyName.ifBlank { host })) }
-            pump(reader)
-            if (!closed.get()) fail(context.getString(R.string.vf_stream_ended))
+            var first = true
+            while (!closed.get()) {
+                val reader = if (first) open(c) else reopen(c) ?: break
+                if (first) startUp(c)
+                first = false
+                try { pump(reader) } catch (e: java.io.IOException) { if (closed.get()) break else LogBus.log("Viewfinder: live view interrupted (${e.message})") }
+            }
         } catch (e: Exception) {
             if (!closed.get()) fail(e.message ?: e.toString())
         } finally {
             decoder?.release(); decoder = null
         }
+    }
+
+    private fun open(c: RvfClient): AviFrameReader {
+        val (resp, reader) = c.openStream()
+        stream = resp
+        streamOpens.incrementAndGet()
+        if (closed.get()) resp.close()
+        return reader
+    }
+
+    /** After the stream ended: wait for a picture in progress, then open it again for up to [reopenTimeoutMs]. Null = gave up (session failed). */
+    private fun reopen(c: RvfClient): AviFrameReader? {
+        runCatching { stream?.close() }
+        synchronized(captureDone) { while (capturing.get() && !closed.get()) captureDone.wait(500) }
+        val deadline = System.currentTimeMillis() + reopenTimeoutMs
+        var last: Exception? = null
+        while (!closed.get() && System.currentTimeMillis() < deadline) {
+            try { return open(c) } catch (e: Exception) { last = e; Thread.sleep(1_000) }
+        }
+        if (!closed.get()) fail(context.getString(R.string.vf_stream_ended) + (last?.message?.let { " ($it)" } ?: ""))
+        return null
+    }
+
+    /** What Samsung's app does once the first frame arrived: half-press, let go, then "connected". */
+    private fun startUp(c: RvfClient) = command {
+        if (c.canFocus) c.focus()
+        c.releaseFocus()
+        if (c.info?.availShots == 0) post { listener.onShot(null, null, context.getString(R.string.vf_card_full)) }
+        post { listener.onReady() }
     }
 
     private fun pump(reader: AviFrameReader) {
@@ -181,24 +223,43 @@ class ViewfinderSession(
         }
     }
 
-    /** Half-press then full press, then (optionally) fetch the picture into the phone folder. */
+    /**
+     * Half-press then full press, then (optionally) fetch the picture into the phone folder. On NX
+     * models a failed focus cancels the shot, like on the camera (and in Samsung's app).
+     */
     fun shoot() = command {
         val c = client ?: return@command
-        if (c.canFocus) c.focus()
-        val shot = c.shoot(toPhone = prefs.rvfSaveShots)
-        val name = shot.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
-        if (!prefs.rvfSaveShots || shot.url == null || name == null) {
-            post { listener.onShot(name, null, context.getString(R.string.vf_shot_on_card)) }
-            return@command
+        if (c.canFocus) {
+            val f = c.focus()
+            if (!f.ok && c.cancelsShotOnFocusFail) {
+                c.releaseFocus()
+                post { listener.onShot(null, null, context.getString(R.string.vf_focus_failed)) }
+                return@command
+            }
         }
-        val bytes = c.download(shot.url!!)
-        val date = LocalDate.now().toString()
-        val sink = Sinks.direct(context, prefs.folderUri)
-        sink.store(IncomingFile(name, date, bytes.size.toLong(), "image/jpeg", "object.item.imageItem", host), ByteArrayInputStream(bytes))
-        val where = sink.describe(date, name)
-        Transfers.record(date, name, bytes.size.toLong(), TransferState.ON_PHONE, where)
-        LogBus.log("Viewfinder: saved $name (${Ui.formatSize(bytes.size.toLong())}) to $where")
-        post { listener.onShot(name, where, context.getString(R.string.vf_shot_saved, name)) }
+        capturing.set(true)
+        try {
+            val shot = c.shoot(toPhone = prefs.rvfSaveShots)
+            val url = shot.url
+            if (shot.availShots == 0) post { listener.onShot(null, null, context.getString(R.string.vf_card_full)) }
+            if (!prefs.rvfSaveShots || url == null) {
+                post { listener.onShot(url?.substringAfterLast('/'), null, context.getString(R.string.vf_shot_on_card)) }
+                return@command
+            }
+            val pic = c.downloadShot(url)
+            // the camera's small copy gets its own name: the full picture comes later with Auto Backup
+            val name = if (pic.preview) pic.name.substringBeforeLast('.') + "_preview." + pic.name.substringAfterLast('.', "jpg") else pic.name
+            val date = LocalDate.now().toString()
+            val sink = Sinks.direct(context, prefs.folderUri)
+            sink.store(IncomingFile(name, date, pic.bytes.size.toLong(), "image/jpeg", "object.item.imageItem", host), ByteArrayInputStream(pic.bytes))
+            val where = sink.describe(date, name)
+            Transfers.record(date, name, pic.bytes.size.toLong(), TransferState.ON_PHONE, where)
+            LogBus.log("Viewfinder: saved $name (${Ui.formatSize(pic.bytes.size.toLong())}) to $where")
+            post { listener.onShot(name, where, context.getString(if (pic.preview) R.string.vf_preview_saved else R.string.vf_shot_saved, name)) }
+        } finally {
+            capturing.set(false)
+            synchronized(captureDone) { captureDone.notifyAll() }
+        }
     }
 
     fun zoom(tele: Boolean) = command { val z = client?.zoom(tele); post { listener.onZoom(z) } }
@@ -222,10 +283,11 @@ class ViewfinderSession(
         post { listener.onState(State.FAILED, message) }
     }
 
-    /** Ends the session; the camera closes its viewfinder when the stream goes away. */
+    /** Ends the session; the camera closes its viewfinder when the stream goes away (no bye on these models). */
     fun stop() {
         if (closed.getAndSet(true)) return
         commands.shutdownNow()
+        synchronized(captureDone) { captureDone.notifyAll() }
         Thread { runCatching { stream?.close() } }.start()
         post { listener.onState(State.CLOSED, context.getString(R.string.vf_closed)) }
     }

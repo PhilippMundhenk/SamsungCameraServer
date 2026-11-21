@@ -53,17 +53,19 @@ class ViewfinderTest {
     private val sims = ArrayList<RvfCameraSimulator>()
 
     @Before
-    fun setUp() { TestSupport.reset(Mode.PHONE) }
+    fun setUp() { TestSupport.reset(Mode.PHONE); ViewfinderActivity.reopenTimeoutMs = 60_000 }
 
     @After
-    fun tearDown() { sims.forEach { it.stop() }; TestSupport.reset(Mode.PHONE) }
+    fun tearDown() { sims.forEach { it.stop() }; TestSupport.reset(Mode.PHONE); ViewfinderActivity.reopenTimeoutMs = 60_000 }
+
+    private fun waitForShutter() = waitForUi(30_000) { onView(withId(R.id.shutter)).check(matches(androidx.test.espresso.matcher.ViewMatchers.isEnabled())) }
 
     private fun jpeg(w: Int, h: Int, color: Int): ByteArray = ByteArrayOutputStream().also { out ->
         Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).apply { eraseColor(color) }.compress(Bitmap.CompressFormat.JPEG, 80, out)
     }.toByteArray()
 
-    private fun sim(profile: RvfCameraSimulator.Profile, frames: List<ByteArray>, codec: VideoCodec, w: Int, h: Int, photo: ByteArray = jpeg(64, 48, Color.RED)) =
-        RvfCameraSimulator(profile, frames, codec, w, h, fps = 15, photo = photo, log = { android.util.Log.i("UITest", "sim: $it") }).start().also { sims += it }
+    private fun sim(profile: RvfCameraSimulator.Profile, frames: List<ByteArray>, codec: VideoCodec, w: Int, h: Int, photo: ByteArray = jpeg(64, 48, Color.RED), preview: ByteArray = jpeg(32, 24, Color.MAGENTA)) =
+        RvfCameraSimulator(profile, frames, codec, w, h, fps = 15, photo = photo, preview = preview, log = { android.util.Log.i("UITest", "sim: $it") }).start().also { sims += it }
 
     private fun connectTo(s: RvfCameraSimulator) {
         onView(withId(R.id.address)).perform(replaceText("127.0.0.1:${s.controlPort}"))
@@ -71,17 +73,19 @@ class ViewfinderTest {
     }
 
     @Test
-    fun nx1000_h264LiveView_shutterSavesPicture_disconnect() {
+    fun nx1000_h264LiveView_shutterSavesPreview_streamComesBack_disconnect() {
         val photo = jpeg(320, 240, Color.BLUE)
+        val preview = jpeg(160, 120, Color.CYAN)
         val frames = H264.encode(320, 240, 30)
         assertTrue(frames.first().let { org.mundhenk.cambackup.core.AviFrameReader.isKeyFrame(it) })
-        val s = sim(RvfCameraSimulator.Profile.NX1000, frames, VideoCodec.H264, 320, 240, photo)
+        val s = sim(RvfCameraSimulator.Profile.NX1000, frames, VideoCodec.H264, 320, 240, photo, preview)
         ActivityScenario.launch(ViewfinderActivity::class.java).use { sc ->
             onView(withId(R.id.liveStatus)).check(matches(withText(R.string.vf_idle)))
             onView(withId(R.id.saveShots)).check(matches(androidx.test.espresso.matcher.ViewMatchers.isChecked()))
             connectTo(s)
             waitForUi { onView(withId(R.id.shutter)).check(matches(isDisplayed())) }
-            onView(withId(R.id.zoomIn)).check(matches(withEffectiveVisibility(Visibility.GONE))) // NX1000: no zoom over Wi-Fi
+            waitForShutter() // after the start-up half-press
+            onView(withId(R.id.zoomIn)).check(matches(withEffectiveVisibility(Visibility.GONE))) // NX1000: lens-ring zoom only
             onView(withId(R.id.setupCard)).check(matches(withEffectiveVisibility(Visibility.GONE)))
             onView(withId(R.id.connect)).check(matches(withText(R.string.vf_disconnect)))
             waitForUi { onView(withId(R.id.liveInfo)).check(matches(withText("320×240 H.264"))) }
@@ -90,12 +94,19 @@ class ViewfinderTest {
             waitFor(30_000) { session!!.framesDecoded >= 3 }
 
             onView(withId(R.id.shutter)).perform(tap())
-            waitForUi(30_000) { onView(withId(R.id.lastShot)).check(matches(withText(context.getString(R.string.vf_shot_saved, "SAM_0001.JPG")))) }
+            waitForUi(30_000) { onView(withId(R.id.lastShot)).check(matches(withText(context.getString(R.string.vf_preview_saved, "SAM_0001_preview.JPG")))) }
             val date = LocalDate.now().toString()
-            assertNotNull(Transfers.get(date, "SAM_0001.JPG"))
-            assertArrayEquals(photo, Sinks.direct(context, null).open(date, "SAM_0001.JPG")!!.use { it.readBytes() })
-            assertEquals(listOf("GetInfomation", "MULTIAF", "Shot"), s.calls.toList())
-            assertTrue(s.userAgents.all { it == RvfClient.UA_PREFIX + Prefs(context).rvfClientId })
+            assertNotNull(Transfers.get(date, "SAM_0001_preview.JPG"))
+            // the 2012 firmware only hands out the _SM copy; the original stays on the card for Auto Backup
+            assertArrayEquals(preview, Sinks.direct(context, null).open(date, "SAM_0001_preview.JPG")!!.use { it.readBytes() })
+            assertEquals(listOf("/DCIM/100PHOTO/SAM_0001.JPG_SM"), s.downloads.toList())
+            assertEquals(listOf("GetInfomation", "MULTIAF", "ReleaseSelfTimer", "MULTIAF", "Shot"), s.calls.toList())
+            assertEquals(listOf(RvfClient.UA_PREFIX + Prefs(context).rvfClientId), s.userAgents.toList())
+            // the camera ended the live view for the picture; it is back afterwards
+            waitFor(30_000) { session!!.streamOpens.get() >= 2 && s.streamReaders == 1 }
+            val decoded = session!!.framesDecoded
+            waitFor(30_000) { session!!.framesDecoded > decoded }
+            waitForShutter()
 
             onView(withId(R.id.connect)).perform(tap())
             waitForUi { onView(withId(R.id.setupCard)).check(matches(isDisplayed())) }
@@ -120,6 +131,7 @@ class ViewfinderTest {
             var session: ViewfinderSession? = null
             sc.onActivity { session = it.session }
             waitFor { session!!.framesShown.get() >= 2 }
+            waitForShutter()
             onView(withId(R.id.zoomIn)).perform(tap())
             waitForUi { onView(withId(R.id.liveInfo)).check(matches(withSubstring("zoom 1"))) }
             onView(withId(R.id.zoomIn)).perform(tap())
@@ -128,7 +140,7 @@ class ViewfinderTest {
             waitForUi { onView(withId(R.id.liveInfo)).check(matches(withText("320×240 MJPEG · zoom 1"))) }
             onView(withId(R.id.shutter)).perform(tap())
             waitForUi { onView(withId(R.id.lastShot)).check(matches(withText(R.string.vf_shot_on_card))) }
-            assertEquals(listOf("GetInfomation", "ZoomIN", "ZoomIN", "ZoomOUT", "AF", "Shot"), s.calls.toList())
+            assertEquals(listOf("GetInfomation", "AF", "ZoomIN", "ZoomIN", "ZoomOUT", "AF", "Shot"), s.calls.toList())
             assertTrue(Transfers.list().isEmpty())
         } // closing the screen while live ends the session (onStop)
         waitFor { s.streamReaders == 0 }
@@ -160,6 +172,7 @@ class ViewfinderTest {
     /** The camera goes away mid-session: the next command reports the error, the lost stream ends the session. */
     @Test
     fun cameraGoesAway() {
+        ViewfinderActivity.reopenTimeoutMs = 3_000
         val s = sim(RvfCameraSimulator.Profile.NX1000, listOf(jpeg(160, 120, Color.WHITE)), VideoCodec.MJPEG, 160, 120)
         ActivityScenario.launch(ViewfinderActivity::class.java).use { sc ->
             connectTo(s)
@@ -174,17 +187,21 @@ class ViewfinderTest {
         }
     }
 
-    /** A command the camera rejects shows up under the shutter, and the session stays live. */
+    /** NX: a failed focus cancels the shot; a capture the camera fails shows its message; the session stays live. */
     @Test
-    fun commandFailureIsShown() {
+    fun focusFailsAndCaptureFails() {
         val s = sim(RvfCameraSimulator.Profile.NX1000, listOf(jpeg(160, 120, Color.WHITE)), VideoCodec.MJPEG, 160, 120)
-        ActivityScenario.launch(ViewfinderActivity::class.java).use { sc ->
+        ActivityScenario.launch(ViewfinderActivity::class.java).use {
             connectTo(s)
-            waitForUi { onView(withId(R.id.shutter)).check(matches(isDisplayed())) }
-            var session: ViewfinderSession? = null
-            sc.onActivity { session = it.session }
-            session!!.zoom(true) // not declared by the NX1000: refused before it reaches the camera
-            waitForUi { onView(withId(R.id.lastShot)).check(matches(withSubstring("does not offer ZoomIN"))) }
+            waitForShutter()
+            s.focusOk = false
+            onView(withId(R.id.shutter)).perform(tap())
+            waitForUi { onView(withId(R.id.lastShot)).check(matches(withText(R.string.vf_focus_failed))) }
+            assertEquals(0, s.shotCount)
+            assertEquals(listOf("GetInfomation", "MULTIAF", "ReleaseSelfTimer", "MULTIAF", "ReleaseSelfTimer"), s.calls.toList())
+            s.focusOk = true; s.failShots = true
+            onView(withId(R.id.shutter)).perform(tap())
+            waitForUi { onView(withId(R.id.lastShot)).check(matches(withSubstring("could not take the picture"))) }
             onView(withId(R.id.shutter)).check(matches(isDisplayed()))
             assertEquals(emptyList<String>(), s.violations.toList())
         }

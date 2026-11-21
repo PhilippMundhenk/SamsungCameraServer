@@ -34,7 +34,11 @@ class RvfTest {
     @After
     fun tearDown() { sims.forEach { it.stop() } }
 
-    /** The whole NX1000 session: pair, GetInfomation, stream, AF + Shot while streaming, download. */
+    /**
+     * The whole NX1000 session as Samsung's apps run it: pair on the description only, GetInfomation
+     * (stream URL in GETIPRESULT, no version), stream, AF + Shot while streaming, the stream ends at
+     * the Shot, the `_SM` preview is downloaded, the stream is opened again.
+     */
     @Test
     fun nx1000Session() {
         val s = sim(RvfCameraSimulator.Profile.NX1000)
@@ -42,13 +46,16 @@ class RvfTest {
         val info = c.connect()
         assertEquals("[Camera]NX1000", c.friendlyName)
         assertEquals("SP1", c.modelName)
-        assertTrue(info.streamUrl.endsWith("/livestream.avi"))
-        assertTrue(info.lowStreamUrl!!.endsWith("/qvga_livestream.avi"))
+        assertEquals("http://127.0.0.1:${s.streamPort}/livestream.avi", info.streamUrl) // from GETIPRESULT
+        assertNull(info.lowStreamUrl)
+        assertNull(info.version); assertEquals(0.0, info.versionNumber, 0.0)
         assertEquals(listOf("off", "auto", "fill"), info.flashModes)
         assertEquals("auto", info.flash)
         assertEquals(999, info.availShots)
-        assertFalse(c.canZoom)
+        assertTrue(c.has("ZoomIN"))
+        assertFalse(c.canZoom) // declared, but the NX1000 zooms with the lens ring
         assertTrue(c.canFocus)
+        assertTrue(c.cancelsShotOnFocusFail)
         assertFalse(c.heartBeat()) // NX1000 has none
 
         val (resp, reader) = c.openStream()
@@ -60,20 +67,47 @@ class RvfTest {
             assertTrue(f0.keyFrame); assertArrayEquals(idr, f0.data)
             val f1 = reader.next()!!
             assertFalse(f1.keyFrame); assertEquals(1L, f1.index)
-            assertEquals("1", c.focus())
+            assertEquals(RvfFocus(true, "1x3,2x3,"), c.focus())
+            assertTrue(c.releaseFocus())
+            assertEquals(RvfFocus(true, "1x3,2x3,"), c.focus())
             val shot = c.shoot()
             assertEquals(998, shot.availShots)
             assertTrue(shot.url!!.endsWith("/DCIM/100PHOTO/SAM_0001.JPG"))
+            // the camera ended the live view for the picture
+            try { while (reader.next() != null) { } } catch (_: IOException) { }
+            val pic = c.downloadShot(shot.url!!)
+            assertTrue(pic.preview); assertEquals("SAM_0001.JPG", pic.name)
+            assertEquals(listOf("/DCIM/100PHOTO/SAM_0001.JPG_SM"), s.downloads.toList())
             assertArrayEquals(jpeg, c.download(shot.url!!))
         }
-        assertEquals(listOf("GetInfomation", "MULTIAF", "Shot"), s.calls)
-        assertTrue(s.userAgents.all { it == "SEC_RVF_02:00:00:aa:bb:cc" })
+        // and comes back when asked again
+        val (again, reader2) = c.openStream()
+        again.use { assertNotNull(reader2.next()) }
+        assertEquals(2, s.streamOpens.get())
+        assertEquals(listOf("GetInfomation", "MULTIAF", "ReleaseSelfTimer", "MULTIAF", "Shot"), s.calls)
+        assertEquals(listOf("SEC_RVF_02:00:00:aa:bb:cc"), s.userAgents.toList()) // the description only
         assertEquals(emptyList<String>(), s.violations)
         // undeclared actions are refused before they reach (and hang) the camera
-        try { c.zoom(true); fail() } catch (e: RvfException) { assertTrue(e.message!!.contains("ZoomIN")) }
-        try { c.setFlash("off"); fail() } catch (e: RvfException) { }
-        assertEquals("", c.call("SetLED", listOf("LEDTIME" to "0")).let { "" })
+        try { c.call("HeartBeat"); fail() } catch (e: RvfException) { assertTrue(e.message!!.contains("HeartBeat")) }
+        // declared arguments always go out, empty when not given
+        c.call("SetLED")
         assertEquals(emptyList<String>(), s.violations)
+    }
+
+    @Test
+    fun focusFailureAndFailedCapture() {
+        val s = sim(RvfCameraSimulator.Profile.NX1000)
+        val c = client(s)
+        c.connect()
+        val (resp, reader) = c.openStream()
+        resp.use {
+            reader.next()
+            s.focusOk = false
+            assertEquals(RvfFocus(false, "AFFAIL"), c.focus())
+            s.failShots = true
+            try { c.shoot(); fail() } catch (e: RvfException) { assertTrue(e.message!!.contains("could not take the picture")) }
+        }
+        assertEquals(RvfFocus(true, null), RvfFocus(true, null))
     }
 
     @Test
@@ -82,7 +116,10 @@ class RvfTest {
         val c = client(s)
         val info = c.connect()
         assertEquals(18, info.maxZoom)
+        assertEquals("DSC_1.0", info.version); assertEquals(1.0, info.versionNumber, 0.0)
         assertTrue(c.canZoom)
+        assertFalse(c.cancelsShotOnFocusFail)
+        assertFalse(c.releaseFocus()) // no ReleaseSelfTimer on this model
         assertEquals(1, c.zoom(true)); assertEquals(2, c.zoom(true)); assertEquals(1, c.zoom(false))
         c.setFlash("off")
         val (resp, reader) = c.openStream(low = true)
@@ -90,25 +127,41 @@ class RvfTest {
             val f = reader.next()!!
             assertEquals(VideoCodec.MJPEG, reader.codec)
             assertTrue(f.keyFrame)
-            assertEquals("1", c.focus()) // AF on this model
+            assertTrue(c.focus().ok) // AF on this model
             assertNull(c.shoot(toPhone = false).url)
-            assertNotNull(c.shoot(toPhone = true).url)
+        }
+        val (resp2, reader2) = c.openStream()
+        resp2.use {
+            reader2.next()
+            val url = c.shoot(toPhone = true).url!!
+            val pic = c.downloadShot(url)
+            assertFalse(pic.preview) // versioned firmware: the original
+            assertArrayEquals(jpeg, pic.bytes)
         }
         assertEquals(listOf("GetInfomation", "ZoomIN", "ZoomIN", "ZoomOUT", "SetFlash", "AF", "Shot", "Shot"), s.calls)
         assertEquals(emptyList<String>(), s.violations)
     }
 
-    /** NX3000: the plain prefix is refused, the client knocks on /mode/control and retries as SEC_RVF_ML_. */
+    /** NX3000: /mode/control answers with MVERSION, so the client pairs as SEC_RVF_ML_ right away. */
     @Test
     fun nx3000NewerPairingGpsAndHeartBeat() {
         val s = sim(RvfCameraSimulator.Profile.NX3000)
-        val c = client(s)
-        c.connect()
-        assertTrue(s.userAgents.first().startsWith("SEC_RVF_02"))
-        assertTrue(s.userAgents.last().startsWith("SEC_RVF_ML_"))
+        val c = RvfClient("127.0.0.1", s.controlPort, "02:00:00:aa:bb:cc", log = { logs += it }, pairTimeoutMs = 5000, timeoutMs = 5000, modePort = s.modePort)
+        assertEquals("CSC_1.1", c.connect().version)
+        assertEquals(listOf("SEC_RVF_ML_02:00:00:aa:bb:cc"), s.userAgents.toList())
         assertTrue(c.heartBeat())
-        assertTrue(logs.any { it.contains("/mode/control") })
+        assertTrue(logs.any { it.contains("/mode/control: HTTP 200") })
         assertEquals(emptyList<String>(), s.violations)
+    }
+
+    /** NX3000 without a reachable /mode/control: the plain prefix is refused, the client retries as SEC_RVF_ML_. */
+    @Test
+    fun nx3000FallbackAfter401() {
+        val s = sim(RvfCameraSimulator.Profile.NX3000)
+        val c = client(s) // knocks on a closed port
+        c.connect()
+        assertEquals(listOf("SEC_RVF_02:00:00:aa:bb:cc", "SEC_RVF_ML_02:00:00:aa:bb:cc"), s.userAgents.toList())
+        assertTrue(logs.any { it.contains("/mode/control not offered") })
     }
 
     @Test
@@ -118,38 +171,45 @@ class RvfTest {
             assertEquals(401, e.status)
             assertTrue(e.message!!.contains("confirm the prompt"))
         }
+        val ml = sim(RvfCameraSimulator.Profile.NX3000).apply { allow = { false } }
+        try { RvfClient("127.0.0.1", ml.controlPort, "x", modePort = ml.modePort, pairTimeoutMs = 5000).connect(); fail() } catch (e: RvfException) { assertEquals(401, e.status) }
     }
 
     @Test
     fun simulatorFlagsClientMistakes() {
         val s = sim(RvfCameraSimulator.Profile.NX1000)
         val http = RvfHttp()
-        fun soap(action: String, args: String = "", ua: String = "SEC_RVF_x"): Int {
+        fun soap(action: String, args: String = "", ua: String? = null): Int {
             val body = "<s:Envelope><s:Body><u:$action xmlns:u=\"${UpnpXml.CDS_SERVICE_TYPE}\">$args</u:$action></s:Body></s:Envelope>".toByteArray()
-            return http.request("127.0.0.1", s.controlPort, "POST", "/smp_4_", listOf("User-Agent" to ua, "SOAPACTION" to "\"${UpnpXml.CDS_SERVICE_TYPE}#$action\""), body).use { it.text(); it.status }
+            val h = listOfNotNull(ua?.let { "User-Agent" to it }, "SOAPACTION" to "\"${UpnpXml.CDS_SERVICE_TYPE}#$action\"")
+            return http.request("127.0.0.1", s.controlPort, "POST", "/smp_4_", h, body).use { it.text(); it.status }
         }
+        assertEquals(401, soap("GetInfomation")) // never paired
         assertEquals(401, http.request("127.0.0.1", s.controlPort, "GET", "/smp_2_").use { it.status })
-        assertEquals(401, soap("Shot", ua = "SEC_RVF_ML_x"))
-        assertEquals(500, soap("MULTIAF")) // before GetInfomation and without a stream reader
-        assertEquals(500, soap("ZoomIN"))
+        assertEquals(401, http.request("127.0.0.1", s.controlPort, "GET", "/smp_2_", listOf("User-Agent" to "SEC_RVF_ML_x")).use { it.status })
+        assertEquals(200, http.request("127.0.0.1", s.controlPort, "GET", "/smp_2_", listOf("User-Agent" to "SEC_RVF_x")).use { it.text(); it.status })
+        assertEquals(500, soap("MULTIAF", ua = "SEC_RVF_x")) // before GetInfomation, no stream reader, with the pairing UA
+        assertEquals(500, soap("HeartBeat"))
         assertEquals(500, soap("GetInfomation", "<GPSINFO>UNKNOWN</GPSINFO>"))
+        assertEquals(500, soap("SetLED")) // declared argument missing
         assertEquals(200, soap("GetInfomation"))
-        assertEquals(404, http.request("127.0.0.1", s.controlPort, "GET", "/nothing", listOf("User-Agent" to "SEC_RVF_x")).use { it.status })
+        assertEquals(404, http.request("127.0.0.1", s.controlPort, "GET", "/nothing").use { it.status })
         assertEquals(404, http.request("127.0.0.1", s.controlPort, "GET", "/DCIM/100PHOTO/other.jpg").use { it.status })
         val v = s.violations.toList()
         assertTrue(v.toString(), v.contains("MULTIAF before GetInfomation"))
         assertTrue(v.contains("MULTIAF while nobody reads the live stream"))
-        assertTrue(v.contains("undeclared action ZoomIN"))
+        assertTrue(v.contains("pairing User-Agent on /smp_4_"))
+        assertTrue(v.contains("undeclared action HeartBeat"))
         assertTrue(v.contains("GetInfomation with undeclared argument GPSINFO"))
+        assertTrue(v.contains("SetLED without LEDTIME"))
 
         // two readers: the second one is turned away
-        val first = http.request("127.0.0.1", s.streamPort, "GET", "/livestream.avi", listOf("User-Agent" to "SEC_RVF_x"))
+        val first = http.request("127.0.0.1", s.streamPort, "GET", "/livestream.avi")
         assertEquals(206, first.status)
         AviFrameReader(first.body).next()
-        val second = http.request("127.0.0.1", s.streamPort, "GET", "/livestream.avi", listOf("User-Agent" to "nobody"))
+        val second = http.request("127.0.0.1", s.streamPort, "GET", "/livestream.avi")
         assertEquals(503, second.status); second.close()
         assertTrue(s.violations.contains("second live stream reader"))
-        assertTrue(s.violations.contains("live stream requested without the pairing User-Agent"))
         assertEquals(1, s.streamReaders)
         first.close()
         assertTrue(s.framesSent.get() > 0)
@@ -159,10 +219,11 @@ class RvfTest {
     fun simulatorNx3000WantsGpsAndStreamNeedsSession() {
         val s = sim(RvfCameraSimulator.Profile.NX3000)
         val http = RvfHttp()
-        assertEquals(404, http.request("127.0.0.1", s.streamPort, "GET", "/livestream.avi", listOf("User-Agent" to "SEC_RVF_ML_x")).use { it.status })
+        assertEquals(404, http.request("127.0.0.1", s.streamPort, "GET", "/livestream.avi").use { it.status })
         assertTrue(s.violations.contains("live stream requested before GetInfomation"))
+        assertEquals(200, http.request("127.0.0.1", s.controlPort, "GET", "/smp_2_", listOf("User-Agent" to "SEC_RVF_ML_x")).use { it.text(); it.status })
         val body = "<u:GetInfomation xmlns:u=\"x\"></u:GetInfomation>".toByteArray()
-        assertEquals(500, http.request("127.0.0.1", s.controlPort, "POST", "/smp_4_", listOf("User-Agent" to "SEC_RVF_ML_x", "SOAPACTION" to "x#GetInfomation"), body).use { it.text(); it.status })
+        assertEquals(500, http.request("127.0.0.1", s.controlPort, "POST", "/smp_4_", listOf("SOAPACTION" to "x#GetInfomation"), body).use { it.text(); it.status })
         assertTrue(s.violations.contains("GetInfomation without GPSINFO"))
         s.start() // idempotent
         s.stop(); s.stop()
@@ -201,6 +262,13 @@ class RvfTest {
         assertEquals("<a>&", RvfClient.unescape("&lt;a&gt;&amp;"))
         val info = RvfClient.parseInfo("<x/>", "10.0.0.1")
         assertEquals("http://10.0.0.1:7679/livestream.avi", info.streamUrl)
+        assertNull(info.version)
+        val legacy = RvfClient.parseInfo("<GETIPRESULT>http://c:7679/x.avi</GETIPRESULT>", "c")
+        assertEquals("http://c:7679/x.avi", legacy.streamUrl)
+        val low = RvfClient.parseInfo("<StreamQuality><Default>low</Default></StreamQuality><QualityHighUrl>http://c/h.avi</QualityHighUrl><QualityLowUrl>http://c/l.avi</QualityLowUrl><Version>CSC_1.2</Version>", "c")
+        assertEquals("http://c/l.avi", low.streamUrl); assertEquals(1.2, low.versionNumber, 0.0)
+        assertEquals("http://c/h.avi", RvfClient.parseInfo("<StreamQuality><Default>low</Default></StreamQuality><QualityHighUrl>http://c/h.avi</QualityHighUrl>", "c").streamUrl)
+        assertEquals(0.0, RvfInfo("u", null, 0, 0, emptyList(), null, null, 0, "none").versionNumber, 0.0)
         assertNull(info.lowStreamUrl); assertNull(info.flash); assertNull(info.availShots)
         assertEquals(0, info.maxZoom); assertEquals(0, info.rotation); assertEquals(emptyList<String>(), info.flashModes)
         val lowOnly = RvfClient.parseInfo("<QualityLowUrl>http://c/q.avi</QualityLowUrl>", "c")
@@ -217,6 +285,7 @@ class RvfTest {
                 "/smp_2_" -> HttpResponse.xml("<root><friendlyName>[Camera]X</friendlyName><service><serviceType>${UpnpXml.CDS_SERVICE_TYPE}</serviceType><controlURL>http://127.0.0.1/ctl</controlURL><SCPDURL>scpd.xml</SCPDURL></service></root>")
                 "/scpd.xml" -> HttpResponse.xml("<scpd></scpd>") // no action list: the client then trusts the caller
                 "/ctl" -> HttpResponse.xml("<GETINFORMATIONRESULT>&lt;ZoomInfo&gt;&lt;MaxZoom&gt;5&lt;/MaxZoom&gt;&lt;/ZoomInfo&gt;</GETINFORMATIONRESULT>")
+                "/p.jpg" -> HttpResponse(200, jpeg, "image/jpeg") // no _SM copy here: the client falls back to the original
                 else -> HttpResponse.notFound()
             }
         })
@@ -226,7 +295,15 @@ class RvfTest {
             assertEquals(5, c.connect().maxZoom)
             assertEquals("", c.modelName)
             assertFalse(c.canZoom)
+            val pic = c.downloadShot("http://127.0.0.1:${server.boundPort}/p.jpg")
+            assertFalse(pic.preview); assertArrayEquals(jpeg, pic.bytes)
+            try { c.downloadShot("http://127.0.0.1:${server.boundPort}/"); fail() } catch (e: RvfException) { assertEquals(404, e.status) }
         } finally { server.stop() }
+        // a camera busy with another phone answers the description with 503
+        val busy = HttpServer(0, { HttpResponse.empty(503) }).apply { start() }
+        try { RvfClient("127.0.0.1", busy.boundPort, "id", modePort = busy.boundPort).connect(); fail() } catch (e: RvfException) {
+            assertTrue(e.message!!.contains("another phone"))
+        } finally { busy.stop() }
     }
 
     @Test

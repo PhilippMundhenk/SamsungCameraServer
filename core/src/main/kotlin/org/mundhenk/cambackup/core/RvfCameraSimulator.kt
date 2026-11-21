@@ -11,10 +11,13 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * A camera in Remote Viewfinder mode: UPnP description / SCPD / SOAP control on one port, the
- * endless AVI live stream on another, pictures served after a Shot. It is as strict as the real
- * cameras were reported to be, and records every rule a client breaks in [violations] instead of
- * hanging like the NX1000 would: a missing or wrong User-Agent (401), an undeclared action, two
- * commands at once, AF or Shot while nobody reads the live stream, a second stream reader.
+ * endless AVI live stream on another, pictures (and their `_SM` previews) served after a Shot,
+ * which ends the running stream like the real cameras do. It is as strict as the real cameras were
+ * reported to be, and records every rule a client breaks in [violations] instead of hanging like
+ * the NX1000 would: a description request without the pairing User-Agent (401), control requests
+ * from a client that never paired, the pairing User-Agent on anything but the description
+ * (Samsung's apps never do that), an undeclared action or argument, two commands at once, AF or
+ * Shot while nobody reads the live stream, a second stream reader.
  *
  * Used by the JVM tests and by the app's instrumented tests (it runs on the phone itself).
  */
@@ -28,6 +31,8 @@ class RvfCameraSimulator(
     private val fps: Int = 15,
     /** JPEG served for every picture taken. */
     private val photo: ByteArray = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xD9.toByte()),
+    /** The small copy served as `<picture>_SM`. */
+    private val preview: ByteArray = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0x53, 0xFF.toByte(), 0xD9.toByte()),
     /** Host name put into the URLs the camera hands out. */
     private val advertisedHost: String = "127.0.0.1",
     controlPort: Int = 0,
@@ -41,36 +46,52 @@ class RvfCameraSimulator(
         val actions: Map<String, List<String>>,
         val maxZoom: Int,
         val uaPrefix: String,
+        /** `<Version>` in GetInfomation; null = the 2012 firmware (no version, stream URL in GETIPRESULT). */
+        val version: String?,
+        /** Answers `/mode/control` on its own port (with MVERSION: a "new" camera). */
+        val modeServer: Boolean,
     ) {
-        /** 2012 NX: no SCPD zoom, Shot without arguments, the strict ordering rules. */
+        /**
+         * 2012 NX. The SCPD Samsung's Remote Viewfinder 2.2.11 requires before it connects: zoom,
+         * resolution, flash, LED timer, Shot without arguments, ShotWithGPS. Zoom is declared but the
+         * NX1000 zooms with the lens ring only.
+         */
         NX1000("NX1000", mapOf(
             "Browse" to listOf("ObjectID", "BrowseFlag", "Filter", "StartingIndex", "RequestedCount", "SortCriteria"),
-            "GetIP" to emptyList(), "GetInfomation" to emptyList(), "MULTIAF" to emptyList(), "Shot" to emptyList(),
-            "ReleaseSelfTimer" to listOf("RELEASETIMER"), "SetLED" to listOf("LEDTIME"),
-        ), 0, RvfClient.UA_PREFIX),
-        /** 2013 compact (WB250F-like): optical zoom, flash, stream quality. */
+            "GetIP" to emptyList(), "GetInfomation" to emptyList(), "SetResolution" to listOf("RESOLUTION"),
+            "ZoomIN" to emptyList(), "ZoomOUT" to emptyList(), "MULTIAF" to emptyList(), "Shot" to emptyList(),
+            "ShotWithGPS" to listOf("GPSINFO"), "ReleaseSelfTimer" to listOf("RELEASETIMER"), "SetLED" to listOf("LEDTIME"),
+            "SetFlash" to listOf("FLASHMODE"),
+        ), 1, RvfClient.UA_PREFIX, null, false),
+        /** 2013 compact (WB250F-like): optical zoom, flash, stream quality, full-size download. */
         WB250F("WB250F", mapOf(
             "GetInfomation" to emptyList(), "AF" to emptyList(), "AFRELEASE" to emptyList(), "Shot" to listOf("REQUESTIMAGE"),
             "ZoomIN" to emptyList(), "ZoomOUT" to emptyList(), "SetFlash" to listOf("FLASHMODE"), "SetStreamQuality" to listOf("Quality"),
-        ), 18, RvfClient.UA_PREFIX),
-        /** 2014 NX (NX3000/NX mini): MobileLink-style pairing, GPSINFO, HeartBeat. */
+        ), 18, RvfClient.UA_PREFIX, "DSC_1.0", false),
+        /** 2014 NX (NX3000/NX mini): /mode/control with MVERSION, MobileLink-style pairing, GPSINFO, HeartBeat. */
         NX3000("NX3000", mapOf(
             "GetInfomation" to listOf("GPSINFO"), "MULTIAF" to emptyList(), "touchAF" to listOf("AFPOSITION"), "Shot" to emptyList(),
             "HeartBeat" to listOf("Duration"), "SetFlash" to listOf("FLASHMODE"), "StartZoom" to listOf("ZoomDirection"), "StopZoom" to listOf("ZoomDirection"),
-        ), 0, RvfClient.UA_PREFIX_ML),
+        ), 0, RvfClient.UA_PREFIX_ML, "CSC_1.1", true),
     }
 
     private val control = HttpServer(controlPort, { handle(it) }, log)
     private var streamSocket: ServerSocket? = null
+    private var modeSocket: ServerSocket? = null
+    private val paired = Collections.synchronizedSet(HashSet<String>())
+    private val streams = Collections.synchronizedSet(HashSet<Socket>())
     private val wantedStreamPort = streamPort
     private val running = AtomicBoolean(false)
     private val pool = Executors.newCachedThreadPool { r -> Thread(r, "rvf-sim").apply { isDaemon = true } }
     private val busy = AtomicBoolean(false)
-    private val readers = AtomicInteger(0)
     private val allowed = Collections.synchronizedSet(HashSet<String>())
     private val shots = AtomicInteger(0)
     @Volatile private var sessionStarted = false
     @Volatile private var zoom = 0
+    /** What the next AF reports: true = in focus, false = AFFAIL. */
+    @Volatile var focusOk = true
+    /** Reply to Shot with UPnP error 803 ("capturing failed") instead. */
+    @Volatile var failShots = false
 
     /** Every rule a client broke; a correct client leaves this empty. */
     val violations: MutableList<String> = Collections.synchronizedList(ArrayList())
@@ -80,11 +101,17 @@ class RvfCameraSimulator(
     val userAgents: MutableList<String> = Collections.synchronizedList(ArrayList())
     /** Frames sent over the live stream so far. */
     val framesSent = AtomicInteger(0)
+    /** How often the live stream was opened. */
+    val streamOpens = AtomicInteger(0)
+    /** Picture paths downloaded, in order. */
+    val downloads: MutableList<String> = Collections.synchronizedList(ArrayList())
     val shotCount: Int get() = shots.get()
-    val streamReaders: Int get() = readers.get()
+    val streamReaders: Int get() = streams.size
 
     val controlPort: Int get() = control.boundPort
     val streamPort: Int get() = streamSocket?.localPort ?: wantedStreamPort
+    /** The /mode/control port, -1 for models without one. */
+    val modePort: Int get() = modeSocket?.localPort ?: -1
 
     fun start(): RvfCameraSimulator {
         if (running.getAndSet(true)) return this
@@ -96,6 +123,18 @@ class RvfCameraSimulator(
                 pool.execute { stream(s) }
             }
         }
+        if (profile.modeServer) {
+            val ms = ServerSocket(0); modeSocket = ms
+            pool.execute {
+                while (running.get()) {
+                    val s = try { ms.accept() } catch (e: IOException) { break }
+                    s.use {
+                        generateSequence { readLine(s) }.takeWhile { it.isNotEmpty() }.toList()
+                        s.getOutputStream().write("HTTP/1.1 200 OK\r\nMVERSION: 1.0\r\nContent-Length: 0\r\n\r\n".toByteArray())
+                    }
+                }
+            }
+        }
         log("RVF simulator (${profile.model}): control ${control.boundPort}, stream ${ss.localPort}")
         return this
     }
@@ -104,26 +143,40 @@ class RvfCameraSimulator(
         if (!running.getAndSet(false)) return
         control.stop()
         runCatching { streamSocket?.close() }
+        runCatching { modeSocket?.close() }
+        endStreams()
         pool.shutdownNow()
     }
 
+    private fun endStreams() { synchronized(streams) { streams.forEach { runCatching { it.close() } }; streams.clear() } }
+
     private fun handle(r: HttpRequest): HttpResponse {
         val ua = r.header("User-Agent") ?: ""
-        userAgents += ua
         if (r.path.startsWith("/DCIM/")) {
-            return if (r.path.substringAfterLast('/').startsWith("SAM_")) HttpResponse(200, photo, "image/jpeg") else HttpResponse.notFound()
+            val file = r.path.substringAfterLast('/')
+            if (!file.startsWith("SAM_")) return HttpResponse.notFound()
+            downloads += r.path
+            return HttpResponse(200, if (file.endsWith("_SM")) preview else photo, "image/jpeg")
         }
-        if (!ua.startsWith(profile.uaPrefix) || (profile.uaPrefix == RvfClient.UA_PREFIX && ua.startsWith(RvfClient.UA_PREFIX_ML))) {
-            return HttpResponse(401, "Unauthorized".toByteArray(), "text/plain")
-        }
-        val id = ua.removePrefix(profile.uaPrefix)
-        if (id !in allowed) {
-            if (!allow(id)) { log("user said no to $id"); return HttpResponse(401, "Unauthorized".toByteArray(), "text/plain") }
-            allowed += id
-            log("user allowed $id")
+        if (r.path != "/smp_2_") {
+            if (ua.startsWith("SEC_")) violations += "pairing User-Agent on ${r.path}"
+            if (r.remoteAddress !in paired) return HttpResponse(401, "Unauthorized".toByteArray(), "text/plain")
         }
         return when (r.path) {
-            "/smp_2_" -> HttpResponse.xml(description())
+            "/smp_2_" -> {
+                userAgents += ua
+                if (!ua.startsWith(profile.uaPrefix) || (profile.uaPrefix == RvfClient.UA_PREFIX && ua.startsWith(RvfClient.UA_PREFIX_ML))) {
+                    return HttpResponse(401, "Unauthorized".toByteArray(), "text/plain")
+                }
+                val id = ua.removePrefix(profile.uaPrefix)
+                if (id !in allowed) {
+                    if (!allow(id)) { log("user said no to $id"); return HttpResponse(401, "Unauthorized".toByteArray(), "text/plain") }
+                    allowed += id
+                    log("user allowed $id")
+                }
+                paired += r.remoteAddress
+                HttpResponse.xml(description())
+            }
             "/smp_3_" -> HttpResponse.xml(scpd())
             "/smp_4_" -> soap(r)
             else -> HttpResponse.notFound()
@@ -141,13 +194,16 @@ class RvfCameraSimulator(
                 ?.let { Regex("<([A-Za-z_]+)>").findAll(it).map { m -> m.groupValues[1] }.toList() }.orEmpty()) {
                 if (arg !in declared) { violations += "$action with undeclared argument $arg"; return fault(501, "Action Failed") }
             }
-            for (arg in declared) if (action == "GetInfomation" && !body.contains("<$arg>")) { violations += "$action without $arg"; return fault(402, "Invalid Args") }
+            for (arg in declared) if (!body.contains("<$arg>") && !body.contains("<$arg/>")) { violations += "$action without $arg"; return fault(402, "Invalid Args") }
             if (action != "GetInfomation" && !sessionStarted) violations += "$action before GetInfomation"
-            if ((action == "MULTIAF" || action == "AF" || action == "Shot") && readers.get() == 0) {
+            if ((action == "MULTIAF" || action == "AF" || action == "Shot") && streams.isEmpty()) {
                 violations += "$action while nobody reads the live stream"
                 return fault(501, "Action Failed")
             }
-            return HttpResponse.xml(UpnpXml.soapResponse(action, UpnpXml.CDS_SERVICE_TYPE, answer(action, body)))
+            if (action == "Shot" && failShots) return fault(803, "Capture Failed")
+            val reply = answer(action, body)
+            if (action == "Shot") endStreams() // the camera stops the live view to take the picture
+            return HttpResponse.xml(UpnpXml.soapResponse(action, UpnpXml.CDS_SERVICE_TYPE, reply))
         } finally { busy.set(false) }
     }
 
@@ -155,13 +211,15 @@ class RvfCameraSimulator(
         "GetInfomation" -> {
             sessionStarted = true
             val s = "http://$advertisedHost:$streamPort"
-            "<GETINFORMATIONRESULT><Resolutions><Resolution><Width>5472</Width><Height>3648</Height></Resolution></Resolutions>" +
+            val urls = if (profile.version == null) "<GETIPRESULT>$s/livestream.avi</GETIPRESULT>"
+                else "<StreamUrl><QualityHighUrl>$s/livestream.avi</QualityHighUrl><QualityLowUrl>$s/qvga_livestream.avi</QualityLowUrl></StreamUrl>"
+            "<GETINFORMATIONRESULT>${profile.version?.let { "<Version>$it</Version>" } ?: ""}<Resolutions><Resolution><Width>5472</Width><Height>3648</Height></Resolution></Resolutions>" +
                 "<Flash><Supports><Support>off</Support><Support>auto</Support><Support>fill</Support></Supports><Defaultflash>auto</Defaultflash></Flash>" +
                 "<ZoomInfo><DefaultZoom>0</DefaultZoom><MaxZoom>${profile.maxZoom}</MaxZoom></ZoomInfo><AVAILSHOTS>${999 - shots.get()}</AVAILSHOTS><ROTATION>0</ROTATION>" +
                 "<StreamQuality><Quality><Option>high</Option><Option>low</Option></Quality><Default>high</Default></StreamQuality></GETINFORMATIONRESULT>" +
-                "<StreamUrl><QualityHighUrl>$s/livestream.avi</QualityHighUrl><QualityLowUrl>$s/qvga_livestream.avi</QualityLowUrl></StreamUrl>"
+                urls
         }
-        "MULTIAF", "AF" -> "<AFSTATUS>1</AFSTATUS>"
+        "MULTIAF", "AF" -> if (focusOk) "<AFSTATUS>1x3,2x3,</AFSTATUS>" else "<AFSTATUS>AFFAIL</AFSTATUS>"
         "Shot" -> {
             val n = shots.incrementAndGet()
             if (body.contains("<REQUESTIMAGE>0</REQUESTIMAGE>")) "<AFSHOTRESULT>none</AFSHOTRESULT><AVAILSHOTS>${999 - n}</AVAILSHOTS>"
@@ -181,21 +239,20 @@ class RvfCameraSimulator(
     private fun stream(s: Socket) {
         s.use {
             val head = generateSequence { readLine(s) }.takeWhile { it.isNotEmpty() }.toList()
-            val ua = head.firstOrNull { it.startsWith("User-Agent:", ignoreCase = true) }?.substringAfter(':')?.trim() ?: ""
             if (!sessionStarted) { violations += "live stream requested before GetInfomation"; s.getOutputStream().write("HTTP/1.1 404 Not Found\r\n\r\n".toByteArray()); return }
-            if (!ua.startsWith(profile.uaPrefix)) violations += "live stream requested without the pairing User-Agent"
-            if (readers.incrementAndGet() > 1) {
+            val admitted = synchronized(streams) { if (streams.isEmpty()) { streams += s; true } else false }
+            if (!admitted) {
                 violations += "second live stream reader"
-                readers.decrementAndGet()
                 s.getOutputStream().write("HTTP/1.1 503 Service Unavailable\r\n\r\n".toByteArray())
                 return
             }
+            streamOpens.incrementAndGet()
             try {
                 val out = s.getOutputStream()
                 out.write("HTTP/1.1 206 Partial Content\r\nContent-Type: video/avi\r\nConnection: close\r\n\r\n".toByteArray())
                 out.write(AviFrameReader.header(width, height, codec))
                 var i = 0
-                while (running.get()) {
+                while (running.get() && !s.isClosed) {
                     out.write(AviFrameReader.chunk(frames[i % frames.size]))
                     out.flush()
                     framesSent.incrementAndGet()
@@ -204,7 +261,7 @@ class RvfCameraSimulator(
                 }
             } catch (_: IOException) { // reader went away
             } catch (_: InterruptedException) {
-            } finally { readers.decrementAndGet() }
+            } finally { streams -= s }
         }
     }
 

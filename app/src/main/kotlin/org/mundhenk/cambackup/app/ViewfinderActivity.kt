@@ -62,7 +62,7 @@ class ViewfinderActivity : AppCompatActivity(), ViewfinderSession.Listener {
         b.addressLayout.error = null
         // remember only an address that differs from the automatic one
         prefs.rvfAddress = if (typed.trim() == CameraNetwork.gateway(this)) "" else typed
-        val s = ViewfinderSession(this, target.first, target.second, this) { b.liveSurface.holder.surface?.takeIf { it.isValid } }
+        val s = ViewfinderSession(this, target.first, target.second, this, reopenTimeoutMs) { b.liveSurface.holder.surface?.takeIf { it.isValid } }
         session = s
         s.start()
     }
@@ -83,7 +83,7 @@ class ViewfinderActivity : AppCompatActivity(), ViewfinderSession.Listener {
             ViewfinderSession.State.LIVE -> {
                 b.liveStatus.visibility = View.GONE
                 b.controls.visibility = View.VISIBLE
-                b.shutter.isEnabled = true
+                b.shutter.isEnabled = false // until the camera answered the first half-press (onReady)
                 b.connect.setText(R.string.vf_disconnect)
                 supportActionBar?.subtitle = message
                 window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -116,6 +116,8 @@ class ViewfinderActivity : AppCompatActivity(), ViewfinderSession.Listener {
         b.liveImage.visibility = if (codec == VideoCodec.MJPEG) View.VISIBLE else View.GONE
     }
 
+    override fun onReady() { b.shutter.isEnabled = true }
+
     override fun onJpegFrame(bitmap: Bitmap) { b.liveImage.setImageBitmap(bitmap) }
 
     override fun onShot(name: String?, savedAs: String?, message: String) {
@@ -131,5 +133,7 @@ class ViewfinderActivity : AppCompatActivity(), ViewfinderSession.Listener {
     companion object {
         /** Where the cameras put themselves in Remote Viewfinder mode when nothing better is known. */
         const val DEFAULT_CAMERA = "192.168.102.1"
+        /** How long a lost live view is retried before the session gives up; shortened by the tests. */
+        @Volatile var reopenTimeoutMs = 60_000L
     }
 }

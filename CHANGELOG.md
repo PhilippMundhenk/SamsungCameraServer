@@ -11,6 +11,14 @@ All notable changes to this project are documented here. The format follows
   MJPEG as well), the shutter, zoom where the camera offers it, and an optional copy of every
   picture taken into the phone folder. The camera's own Wi-Fi is used even while mobile data
   stays on. Samsung's last app for this is 32-bit only and refuses the 2012 models. (#38)
+- The session runs the way Samsung's own apps run it (Remote Viewfinder 2.2.11 for the 2012
+  models, SMART CAMERA App 1.4.0):
+  - the pairing header goes on the description request only;
+  - after the first frame the app focuses once, releases, and only then enables the shutter;
+  - a failed focus cancels the shot on NX models;
+  - the stream is opened again after every picture;
+  - the 2012 firmware's `_SM` copy is downloaded where the camera has nothing else;
+  - the stream URL comes from `GETIPRESULT` on the old firmware.
 - core: `RvfClient`, `AviFrameReader` and `RvfCameraSimulator`. The simulator has NX1000, WB250F
   and NX3000 profiles and is as strict as the real cameras. Protocol notes are in
   docs/PROTOCOL.md under "Remote Viewfinder".
