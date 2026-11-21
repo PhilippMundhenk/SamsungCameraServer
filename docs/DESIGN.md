@@ -334,4 +334,4 @@ view-binding/R classes are excluded.
 ## 9. Related, intentionally out of scope
 
 Email/SNS revival (ge0rg/samsung-nx-emailservice + DNS override on OPNsense), MobileLink,
-TV Link. (Remote Viewfinder moved in scope: [PROTOCOL.md](PROTOCOL.md#remote-viewfinder), #38.) All documented in `docs/CHAT_TRANSCRIPT.txt`.
+TV Link. (Remote Viewfinder is in scope now: [PROTOCOL.md](PROTOCOL.md#remote-viewfinder).) All documented in `docs/CHAT_TRANSCRIPT.txt`.
