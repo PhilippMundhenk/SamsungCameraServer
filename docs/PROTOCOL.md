@@ -138,12 +138,12 @@ POST :7676/smp_4_   SOAPACTION: "urn:schemas-upnp-org:service:ContentDirectory:1
                                  QualityLowUrl   http://<camera>:7679/qvga_livestream.avi
                        or, on the 2012 firmware, GETIPRESULT = the stream URL
 GET  :7679/livestream.avi             <- 206, endless RIFF/AVI, frames in 00dc/00db chunks
-first frame: MULTIAF, then ReleaseSelfTimer(RELEASETIMER=0)                -> "connected"
+first frame: MULTIAF, then ReleaseSelfTimer(RELEASETIMER=0)   (SMART CAMERA App; 2.2.11 sends nothing)
 shutter:     MULTIAF (or AF)          <- AFSTATUS: AFFAIL/0 = no focus, else the AF frames ("1x3,")
              Shot                     <- AFSHOTRESULT = URL of the new JPEG, AVAILSHOTS; the stream ends
+GET  :7679/livestream.avi             live view again (2.2.11 restarts it before fetching the copy)
 GET  <AFSHOTRESULT>_SM                the small copy (no Version / Version < 1.0, e.g. NX1000)
 GET  <AFSHOTRESULT>                   the original (Version >= 1.0)
-GET  :7679/livestream.avi             live view again
 POST /smp_4_ ZoomIN / ZoomOUT         <- CURRENTZOOM     only where the SCPD declares them
 ```
 
@@ -168,6 +168,9 @@ POST /smp_4_ ZoomIN / ZoomOUT         <- CURRENTZOOM     only where the SCPD dec
   * Open the live stream right after `GetInfomation`: until it is read the camera's buttons are
     dead, and MULTIAF / Shot only work while it is being read.
   * The camera drops its Wi-Fi after some idle time.
+* **Rotation.** GetInfomation `ROTATION` gives the camera's orientation; while connected the camera
+  also multicasts SSDP NOTIFYs for its ConnectionManager with a non-standard `NTS:
+  ssdp:rotationD|U|L|R` when it is turned.
 * **Shutter.** MULTIAF (AF on the Galaxy cameras), then Shot. On NX models a failed focus
   (`AFFAIL`) cancels the shot: `ReleaseSelfTimer(0)` instead, like the camera itself does. UPnP
   error 803 on Shot means "capturing failed, try again"; `AVAILSHOTS` 0 means the card is full.
