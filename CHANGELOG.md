@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Android: **Remote Viewfinder**. The camera's live view on the phone (H.264 through MediaCodec,
+  MJPEG as well), the shutter, zoom where the camera offers it, and an optional copy of every
+  picture taken into the phone folder. The camera's own Wi-Fi is used even while mobile data
+  stays on. Samsung's last app for this is 32-bit only and refuses the 2012 models. (#38)
+- core: `RvfClient`, `AviFrameReader` and `RvfCameraSimulator`. The simulator has NX1000, WB250F
+  and NX3000 profiles and is as strict as the real cameras. Protocol notes are in
+  docs/PROTOCOL.md under "Remote Viewfinder".
+
 ## [0.2.1] - 2026-11-01
 
 ### Changed

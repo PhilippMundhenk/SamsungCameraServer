@@ -120,4 +120,31 @@
     <string name="notif_text">Waiting for the camera…</string>
     <string name="pairing_saved">Pairing file saved</string>
     <string name="pairing_failed">Could not save pairing file</string>
+
+    <!-- Remote Viewfinder -->
+    <string name="viewfinder">Remote Viewfinder</string>
+    <string name="vf_idle">Not connected</string>
+    <string name="vf_howto">On the camera: Wi-Fi → Remote Viewfinder. The camera opens its own Wi-Fi (AP_SSC_…). Join it in the phone\'s Wi-Fi settings, keep the connection when Android says it has no internet, then tap Connect. The first time, the camera asks whether to allow this phone: confirm on the camera.</string>
+    <string name="vf_address">Camera address</string>
+    <string name="vf_address_invalid">Enter the camera\'s address, e.g. 192.168.102.1</string>
+    <string name="vf_wifi_settings">Wi-Fi settings</string>
+    <string name="vf_save_shots">Copy pictures taken from here to the phone folder</string>
+    <string name="vf_connect">Connect</string>
+    <string name="vf_cancel">Cancel</string>
+    <string name="vf_disconnect">Disconnect</string>
+    <string name="vf_connecting">Connecting to %1$s… If the camera asks whether to allow this phone, confirm on the camera.</string>
+    <string name="vf_live">Live: %1$s</string>
+    <string name="vf_closed">Disconnected</string>
+    <string name="vf_failed">Connection lost: %1$s</string>
+    <string name="vf_stream_ended">the camera ended the live view. It takes up to a minute before it can stream again.</string>
+    <string name="vf_stream_info">%1$d×%2$d %3$s</string>
+    <string name="vf_live_description">Live view of the camera</string>
+    <string name="vf_shutter">Shutter</string>
+    <string name="vf_zoom_in">Zoom in</string>
+    <string name="vf_zoom_out">Zoom out</string>
+    <string name="vf_zoom_in_short">T</string>
+    <string name="vf_zoom_out_short">W</string>
+    <string name="vf_shot_saved">%1$s saved to the phone folder</string>
+    <string name="vf_shot_on_card">Picture taken, it is on the camera\'s card (Auto Backup brings it over later)</string>
+    <string name="vf_command_failed">The camera did not do that: %1$s</string>
 </resources>

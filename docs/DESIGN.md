@@ -95,6 +95,14 @@ core/  (Kotlin, JVM, zero dependencies — runs on Android and on servers/CI)
   FileSystemSink   <root>/<layout folder>/<name>, dedup by name+size, .part + rename, short uploads rejected
   Layout           folder layouts from the camera date: flat | day | month | year | {yyyy}{MM}{dd} pattern
   CameraSimulator  acts like the camera (used by JVM e2e, Espresso e2e, manual tests)
+  RvfHttp          raw HTTP/1.0 client for the camera's Remote Viewfinder server (one request
+                   per connection, exact Content-Length, 206 live stream; pluggable SocketFactory)
+  RvfClient        Remote Viewfinder: pairing User-Agent, SCPD-gated SOAP, GetInfomation,
+                   AF / Shot / zoom / flash / HeartBeat, serialised; live stream; shot download
+  AviFrameReader   incremental RIFF/AVI reader for the endless live stream (zero container
+                   lengths), H.264 Annex B or MJPEG frames, key-frame detection
+  RvfCameraSimulator  a camera in Remote Viewfinder mode (NX1000 / WB250F / NX3000 profiles);
+                   records every rule a client breaks instead of hanging
   Main             CLI: serve <dir> | pairing <name> | e2e [--ssdp]
 server/ (Kotlin/JVM, depends only on core; Docker image eclipse-temurin 17 + exiftool + RawTherapee + libraw)
   Config           <data>/cambackup.conf (properties, commented defaults written on first start)
@@ -131,6 +139,11 @@ app/   (Android, minSdk 26, Views + Material 3, ViewBinding; tokens from docs/BR
   SettingsActivity mode, folder picker (SAF), server URL/token, identity, pairing export;
                    locked while the server runs
   LogActivity      the LogBus ring buffer with a clear action
+  ViewfinderActivity  Remote Viewfinder screen: live view (SurfaceView for H.264, ImageView for
+                   MJPEG), shutter, zoom where declared, camera address, save-shots switch;
+                   Viewfinder.kt holds CameraNetwork (Wi-Fi gateway, socket factory bound to the
+                   camera Wi-Fi), H264Decoder (MediaCodec) and ViewfinderSession (stream thread +
+                   one command thread)
   BackupService    foreground service (dataSync); MulticastLock + WifiLock + WakeLock;
                    buildSink() picks the sink for the mode and wraps it in RecordingSink
   Sinks            LocalSink = FileSink (app folder) | SafSink (DocumentFile tree): store +
@@ -321,4 +334,4 @@ view-binding/R classes are excluded.
 ## 9. Related, intentionally out of scope
 
 Email/SNS revival (ge0rg/samsung-nx-emailservice + DNS override on OPNsense), MobileLink,
-Remote Viewfinder, TV Link. All documented in `docs/CHAT_TRANSCRIPT.txt`.
+TV Link. (Remote Viewfinder moved in scope: [PROTOCOL.md](PROTOCOL.md#remote-viewfinder), #38.) All documented in `docs/CHAT_TRANSCRIPT.txt`.

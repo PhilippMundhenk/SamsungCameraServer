@@ -107,3 +107,56 @@ POST ContentDirectory  X_BACKUP_DONE  {UDN, SystemOff}
 * Networking: SSDP is multicast with TTL 2, so the target must be on the camera's L2 segment
   (same Wi-Fi, the phone's hotspot, or host/macvlan networking for the container). Ports:
   52235/tcp, 1900/udp.
+
+## Remote Viewfinder
+
+The cameras' other Wi-Fi mode: live view on the phone, shutter from the phone. Here the camera is
+the **server** and the access point; the phone is the client. Reimplemented from published notes,
+used as references only, no code copied:
+[ge0rg/samsung-nx-hacks wiki](https://github.com/ge0rg/samsung-nx-hacks/wiki/Remote-Viewfinder)
+(plus `xml/Remote-ViewFinder/smp_2_.xml`, `smp_3_.xml` captured from an NX3000), the comments on
+[op-co.de "Hacking the NX300"](https://op-co.de/blog/posts/hacking_the_nx300/) (NX300, NX300M,
+NX3000 and NX1000 firmware 1.15 reports), and the hardware notes in
+[RuiJCS/samsung-s150f-reverse-engineer](https://github.com/RuiJCS/samsung-s150f-reverse-engineer).
+
+```
+camera: Wi-Fi -> Remote Viewfinder   opens AP "AP_SSC_<MODEL>_0-xx:xx:xx", is DHCP server + gateway
+                                     192.168.102.1 (third octet = mode; .107 on some NX models)
+phone joins, then (one request per connection, one at a time):
+GET  :7676/smp_2_   User-Agent: SEC_RVF_<id>, Access-Method: manual      device description
+                    first time: the camera asks "allow?"; 401 = refused / not yet allowed
+GET  :7676/smp_3_   ContentDirectory SCPD: the actions this model offers
+POST :7676/smp_4_   SOAPACTION: "urn:schemas-upnp-org:service:ContentDirectory:1#GetInfomation"
+                    <- capabilities (flash modes, ZoomInfo, AVAILSHOTS, StreamQuality) and
+                       StreamUrl/QualityHighUrl  http://<camera>:7679/livestream.avi (640x480)
+                                 QualityLowUrl   http://<camera>:7679/qvga_livestream.avi
+GET  :7679/livestream.avi             <- 206, endless RIFF/AVI, frames in 00dc/00db chunks
+POST /smp_4_ MULTIAF (or AF)          <- AFSTATUS        half-press
+POST /smp_4_ Shot                     <- AFSHOTRESULT = URL of the new JPEG, AVAILSHOTS
+GET  <AFSHOTRESULT>                   the picture, no pairing header needed
+POST /smp_4_ ZoomIN / ZoomOUT         <- CURRENTZOOM     only where the SCPD declares them
+```
+
+* **Identity.** `SEC_RVF_` plus any stable id; the camera remembers ids it allowed. The app uses
+  a random locally administered MAC (`02:…`) generated once per installation. NX3000 / NX mini
+  want `SEC_RVF_ML_` and a `HEAD /mode/control` knock on port 7788 first; the client tries
+  that after a 401 with the plain prefix.
+* **Only declared actions.** The SCPD differs per model; an undeclared action or argument hangs
+  some cameras (`GetInfomation` with `GPSINFO` is a fault on the 2013 compacts but required on
+  the NX3000). `RvfClient` refuses anything the SCPD does not list.
+* **Order and timing (NX1000).** Strictly one command at a time. Open the live stream right
+  after `GetInfomation`: until it is read the camera's buttons are dead, and MULTIAF / Shot only
+  work while it is being read. The camera drops its Wi-Fi after some idle time.
+* **Live stream.** The camera writes `0` for every RIFF/LIST length, so a reader must enter
+  LISTs instead of skipping them and trust only leaf chunk sizes. Stills mode is H.264 (Annex B,
+  SPS/PPS in band, 29.97 fps from `strh` 1001/30000); movie mode on some models MJPEG. Only one
+  reader at a time; a dropped stream leaves the port dead for up to a minute.
+* **Keep-alive.** `HeartBeat(Duration=30)` every 3 s where declared (NX3000); elsewhere reading
+  the stream keeps the session up. GENA events (`/smp_5_`) are unreliable and not used.
+* **Pictures.** `Shot` stores the picture on the card as usual (so Auto Backup still picks it
+  up). Where `Shot` declares `REQUESTIMAGE`, `1` asks the camera to offer it for download. An
+  NX1000 report says the download did not work there; the app then says the picture is on the
+  card.
+
+Open: whether the 2012 compacts (WB150F, WB850F, ST200F, DV300F, EX2F) speak the same dialect
+(the NX1000 of the same year does), and whether Shot downloads work on the NX1000.

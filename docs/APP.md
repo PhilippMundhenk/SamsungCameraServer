@@ -67,6 +67,27 @@ and files its uploads under that user on the server.
 Settings are locked while the server runs. "Clear list" in the overflow menu only clears the
 list, not the files.
 
+## Remote Viewfinder
+
+The camera's live view on the phone, with the shutter (and zoom on cameras that offer it over
+Wi-Fi). Toolbar → camera icon.
+
+1. On the camera: Wi-Fi → *Remote Viewfinder*. The camera opens its own Wi-Fi, named
+   `AP_SSC_<model>_0-xx:xx:xx`.
+2. On the phone: join that Wi-Fi (**Wi-Fi settings** on the screen opens the list). Android
+   warns that it has no internet: keep the connection. The app sends its traffic over that
+   Wi-Fi even while mobile data stays on.
+3. **Connect.** The address is filled in from the Wi-Fi (the camera is its gateway, usually
+   `192.168.102.1`); type another one only if that is wrong. The first time, the camera asks
+   whether to allow this phone: confirm on the camera.
+4. **Shutter** focuses and takes the picture on the camera. With *Copy pictures taken from here
+   to the phone folder* on, the app downloads it into the phone folder and lists it like a
+   backed-up file. Otherwise it stays on the card for the next Auto Backup.
+
+Leaving the screen ends the session; the camera closes its viewfinder. After a lost connection
+the camera may need up to a minute before it streams again. Everything the camera answered is
+in the Log screen.
+
 ## Which build is installed?
 
 Settings ends with `Samsung Camera Backup 0.2.0-<git hash>`, and the same line is the first
