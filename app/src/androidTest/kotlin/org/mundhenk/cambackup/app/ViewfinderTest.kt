@@ -58,7 +58,10 @@ class ViewfinderTest {
     @After
     fun tearDown() { sims.forEach { it.stop() }; TestSupport.reset(Mode.PHONE); ViewfinderActivity.reopenTimeoutMs = 60_000 }
 
-    private fun waitForShutter() = waitForUi(30_000) { onView(withId(R.id.shutter)).check(matches(androidx.test.espresso.matcher.ViewMatchers.isEnabled())) }
+    /** The shutter is usable: shown (session live) and enabled (the camera answered the start-up half-press). */
+    private fun waitForShutter() = waitForUi(30_000) {
+        onView(withId(R.id.shutter)).check(matches(org.hamcrest.Matchers.allOf(isDisplayed(), androidx.test.espresso.matcher.ViewMatchers.isEnabled())))
+    }
 
     private fun jpeg(w: Int, h: Int, color: Int): ByteArray = ByteArrayOutputStream().also { out ->
         Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).apply { eraseColor(color) }.compress(Bitmap.CompressFormat.JPEG, 80, out)
@@ -113,7 +116,7 @@ class ViewfinderTest {
             onView(withId(R.id.liveStatus)).check(matches(withText(R.string.vf_closed)))
             waitFor { s.streamReaders == 0 }
             assertEquals(emptyList<String>(), s.violations.toList())
-            assertTrue(LogBus.snapshot().any { it.contains("saved SAM_0001.JPG") })
+            assertTrue(LogBus.snapshot().any { it.contains("saved SAM_0001_preview.JPG") })
         }
         // the address typed is remembered for next time
         assertEquals("127.0.0.1:${s.controlPort}", Prefs(context).rvfAddress)

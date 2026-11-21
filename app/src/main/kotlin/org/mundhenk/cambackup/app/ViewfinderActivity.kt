@@ -35,7 +35,7 @@ class ViewfinderActivity : AppCompatActivity(), ViewfinderSession.Listener {
         b.saveShots.isChecked = prefs.rvfSaveShots
         b.saveShots.setOnCheckedChangeListener { _, on -> prefs.rvfSaveShots = on }
         b.connect.setOnClickListener { if (session == null) connect() else disconnect() }
-        b.shutter.setOnClickListener { b.shutter.isEnabled = false; session?.shoot() }
+        b.shutter.setOnClickListener { val s = session ?: return@setOnClickListener; b.shutter.isEnabled = false; s.shoot() }
         b.zoomIn.setOnClickListener { session?.zoom(true) }
         b.zoomOut.setOnClickListener { session?.zoom(false) }
         b.wifiSettings.setOnClickListener {

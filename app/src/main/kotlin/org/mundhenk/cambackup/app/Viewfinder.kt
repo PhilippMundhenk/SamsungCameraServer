@@ -228,7 +228,8 @@ class ViewfinderSession(
      * models a failed focus cancels the shot, like on the camera (and in Samsung's app).
      */
     fun shoot() = command {
-        val c = client ?: return@command
+        // not connected (yet): give the shutter back instead of leaving it disabled
+        val c = client ?: run { post { listener.onReady() }; return@command }
         if (c.canFocus) {
             val f = c.focus()
             if (!f.ok && c.cancelsShotOnFocusFail) {
